@@ -90,18 +90,26 @@ pub fn process_commits(enriched_commits: &[crate::git_parser::EnrichedCommit])
             // Track LOC history
             let dt = chrono::DateTime::<chrono::Utc>::from_timestamp(commit.timestamp, 0)
                 .ok_or_else(|| anyhow::anyhow!("Invalid timestamp: {}", commit.timestamp))?;
+
+            // Use current LOC (stored in deletions field) if available, else use estimated
+            let current_loc = if change.deletions > 0 {
+                change.deletions  // Current LOC from git show HEAD:file
+            } else {
+                change.additions + change.deletions  // Fallback to sum
+            };
+
             calculator.loc_by_file_by_date
                 .entry(file.clone())
                 .or_insert_with(Vec::new)
-                .push((dt, change.additions + change.deletions));
+                .push((dt, current_loc));
 
             // Track author interactions
             calculator.record_author_interaction(file, &commit.author);
 
             // Store churn
-            let total = change.additions + change.deletions;
-            if total > 0 {
-                let churn = calculator.calculate_churn(change.additions, change.deletions, total);
+            // For churn calculation, use current LOC as the denominator
+            if current_loc > 0 {
+                let churn = calculator.calculate_churn(change.additions, 0, current_loc);
                 calculator.churn_by_file
                     .entry(file.clone())
                     .or_insert_with(Vec::new)

@@ -124,20 +124,64 @@ pub fn parse_git_history(repo_path: &Path, period: &str) -> anyhow::Result<Vec<E
                     let mut additions = 0;
                     let mut deletions = 0;
 
-                    // Count + and - symbols
-                    for ch in stats.chars() {
-                        if ch == '+' { additions += 1; }
-                        if ch == '-' { deletions += 1; }
+                    // Extract numeric value before the +/- symbols
+                    // e.g., "21 ++++++++++++---" → 21
+                    let parts: Vec<&str> = stats.split_whitespace().collect();
+                    if !parts.is_empty() {
+                        if let Ok(num) = parts[0].parse::<usize>() {
+                            // This is the number of changed lines in this commit
+                            // We'll get the total LOC separately
+                            additions = num;
+                        }
                     }
 
-                    if additions > 0 || deletions > 0 {
+                    if additions > 0 {
                         commit.file_changes.insert(file.to_string(), FileChange {
                             file: file.to_string(),
                             additions,
-                            deletions,
+                            deletions: 0,
                         });
                     }
                 }
+            }
+        }
+    }
+
+    // Get total LOC for each file from HEAD
+    // This gives us the current actual line count, not just changes in this commit
+    let mut current_loc = HashMap::new();
+    if let Ok(ls_output) = Command::new("git")
+        .current_dir(repo_path)
+        .arg("ls-files")
+        .output()
+    {
+        let ls_str = String::from_utf8_lossy(&ls_output.stdout);
+        for file in ls_str.lines() {
+            if should_ignore_file(repo_path, file) || should_exclude_by_extension(file) {
+                continue;
+            }
+
+            // Get current line count for this file
+            if let Ok(show_head) = Command::new("git")
+                .current_dir(repo_path)
+                .arg("show")
+                .arg(format!("HEAD:{}", file))
+                .output()
+            {
+                let content = String::from_utf8_lossy(&show_head.stdout);
+                let line_count = content.lines().count();
+                if line_count > 0 {
+                    current_loc.insert(file.to_string(), line_count);
+                }
+            }
+        }
+    }
+
+    // Update file_changes with actual LOC from current HEAD
+    for commit in &mut commits {
+        for (file, change) in &mut commit.file_changes {
+            if let Some(loc) = current_loc.get(file) {
+                change.deletions = *loc; // Store total LOC in deletions field for now
             }
         }
     }
