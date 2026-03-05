@@ -106,6 +106,59 @@ mod tests {
         assert!(hotspots.is_empty() || hotspots.len() <= 5);
     }
 
+    #[test]
+    fn test_detect_trend_unstable_with_high_churn() {
+        use chrono::Utc;
+
+        let mut file_metrics = HashMap::new();
+
+        // Create multiple files with high churn metrics (need at least 2 churn values total)
+        let mut churn_history1 = vec![];
+        churn_history1.push(crate::models::ChurnMetric {
+            file: "main.rs".to_string(),
+            timestamp: Utc::now(),
+            churn_percentage: 75.0,
+        });
+
+        let mut churn_history2 = vec![];
+        churn_history2.push(crate::models::ChurnMetric {
+            file: "lib.rs".to_string(),
+            timestamp: Utc::now(),
+            churn_percentage: 70.0,
+        });
+
+        file_metrics.insert("main.rs".to_string(), crate::models::FileMetrics {
+            file: "main.rs".to_string(),
+            loc_history: vec![],
+            churn_history: churn_history1,
+            authors: vec![],
+            complexity_history: vec![],
+        });
+
+        file_metrics.insert("lib.rs".to_string(), crate::models::FileMetrics {
+            file: "lib.rs".to_string(),
+            loc_history: vec![],
+            churn_history: churn_history2,
+            authors: vec![],
+            complexity_history: vec![],
+        });
+
+        let analysis = AnalysisResult {
+            repository_path: ".".to_string(),
+            analysis_period: "3m".to_string(),
+            files_analyzed: 2,
+            total_commits: 10,
+            authors_count: 1,
+            file_metrics,
+            predictions: vec![],
+            overall_trend: Trend::Stable,
+            timestamp: Utc::now(),
+        };
+
+        let trend = detect_trend(&analysis);
+        assert_eq!(trend, Trend::Degrading, "High churn (avg 72.5%) should be detected as Degrading");
+    }
+
     fn create_test_analysis() -> AnalysisResult {
         use std::collections::HashMap;
         use chrono::Utc;

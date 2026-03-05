@@ -65,7 +65,7 @@ cargo build --release
 
 ```bash
 # Clone and build
-git clone https://github.com/YOUR_REPO/warden.git
+git clone https://github.com/sergiogswv/warden.git
 cd warden
 cargo build --release
 
@@ -77,14 +77,14 @@ cargo build --release
 
 ```bash
 # Linux
-curl -fsSL https://raw.githubusercontent.com/YOUR_REPO/installers/install-linux.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sergiogswv/warden/installers/install-linux.sh | bash
 
 # macOS
-brew tap YOUR_ORG/warden
+brew tap sergiogswv/warden
 brew install warden
 
 # Windows
-powershell -Command "& { $(irm https://raw.githubusercontent.com/YOUR_REPO/installers/install-windows.ps1) }"
+powershell -Command "& { $(irm https://raw.githubusercontent.com/sergiogswv/warden/installers/install-windows.ps1) }"
 ```
 
 See [Installation Guide](installers/README.md) for more details.
@@ -93,25 +93,34 @@ See [Installation Guide](installers/README.md) for more details.
 
 ## 🔄 Version Management & Updates
 
+### Quick Update (Recommended)
+
+From the Warden project directory - just run:
+
+```bash
+./installers/install-linux.sh
+
+# Or with sudo if you have permission issues
+sudo ./installers/install-linux.sh
+```
+
+The installer automatically:
+- ✅ Detects if you're in the project directory
+- ✅ Compiles automatically if code changed
+- ✅ Detects version changes
+- ✅ Updates `/usr/local/bin/warden`
+- ✅ Verifies the installation
+
+**No flags, no complexity!** Just execute the script.
+
 ### Check for Updates
 
 ```bash
-# Check installed vs available version
+# Check installed vs compiled version
 warden check-updates
 
 # Or use the helper script
 ./installers/check-updates.sh
-```
-
-### Update Warden
-
-```bash
-# Development: recompile and install
-cargo build --release
-./installers/install-linux.sh  # Prompts if new version available
-
-# Production: download latest release
-warden update
 ```
 
 ### Release Process

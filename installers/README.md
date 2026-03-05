@@ -7,14 +7,14 @@ This directory contains installation scripts and tools for distributing Warden a
 ### Linux (Recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YOUR_GITHUB_REPO/installers/install-linux.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sergiogswv/warden/installers/install-linux.sh | bash
 ```
 
 Or with manual installation:
 
 ```bash
 # Download the latest release
-curl -L -o /tmp/warden-linux.tar.gz https://github.com/YOUR_GITHUB_REPO/releases/download/v0.1.0/warden-linux-x86_64.tar.gz
+curl -L -o /tmp/warden-linux.tar.gz https://github.com/sergiogswv/warden/releases/download/v0.2.0/warden-linux-x86_64.tar.gz
 tar -xzf /tmp/warden-linux.tar.gz
 sudo mv warden-linux-x86_64 /usr/local/bin/warden
 chmod +x /usr/local/bin/warden
@@ -30,7 +30,7 @@ warden --version
 First, set up the tap:
 
 ```bash
-brew tap YOUR_ORG/warden
+brew tap sergiogswv/warden
 brew install warden
 ```
 
@@ -39,10 +39,10 @@ brew install warden
 ```bash
 # Download the appropriate binary
 # For Apple Silicon:
-curl -L -o /tmp/warden-macos.tar.gz https://github.com/YOUR_GITHUB_REPO/releases/download/v0.1.0/warden-macos-aarch64.tar.gz
+curl -L -o /tmp/warden-macos.tar.gz https://github.com/sergiogswv/warden/releases/download/v0.2.0/warden-macos-aarch64.tar.gz
 
 # For Intel Mac:
-curl -L -o /tmp/warden-macos.tar.gz https://github.com/YOUR_GITHUB_REPO/releases/download/v0.1.0/warden-macos-x86_64.tar.gz
+curl -L -o /tmp/warden-macos.tar.gz https://github.com/sergiogswv/warden/releases/download/v0.2.0/warden-macos-x86_64.tar.gz
 
 tar -xzf /tmp/warden-macos.tar.gz
 sudo mv warden-macos-* /usr/local/bin/warden
@@ -57,7 +57,7 @@ warden --version
 #### Option 1: PowerShell Script (Recommended)
 
 ```powershell
-powershell -Command "& { $(irm https://raw.githubusercontent.com/YOUR_GITHUB_REPO/installers/install-windows.ps1) }"
+powershell -Command "& { $(irm https://raw.githubusercontent.com/sergiogswv/warden/installers/install-windows.ps1) }"
 ```
 
 #### Option 2: Manual Installation
@@ -78,20 +78,28 @@ powershell -Command "& { $(irm https://raw.githubusercontent.com/YOUR_GITHUB_REP
 
 Warden uses a single version source (`.version` file) for all components.
 
-### Checking for Updates (Development)
+### Quick Update (Development)
+
+**Recommended method - Build and auto-install in one command:**
+
+```bash
+# From project root or installers directory
+./installers/install-linux.sh --build
+
+# Or with sudo if needed
+sudo ./installers/install-linux.sh --build
+```
+
+This automatically:
+- ✅ Compiles the latest version
+- ✅ Detects version changes
+- ✅ Updates `/usr/local/bin/warden`
+- ✅ Verifies installation
+
+### Checking for Updates
 
 ```bash
 ./installers/check-updates.sh
-```
-
-This compares your installed version with the compiled version.
-
-### Updating (Development)
-
-```bash
-cargo build --release
-./installers/install-linux.sh
-# → Prompts if new version is available
 ```
 
 ### Releasing New Version
@@ -205,8 +213,8 @@ warden
 1. Create a new release tag:
 
 ```bash
-git tag -a v0.1.0 -m "Warden v0.1.0"
-git push origin v0.1.0
+git tag -a v0.2.0 -m "Warden v0.2.0"
+git push origin v0.2.0
 ```
 
 2. Build binaries:
@@ -218,7 +226,7 @@ git push origin v0.1.0
 3. Upload to GitHub releases:
 
 ```bash
-gh release create v0.1.0 release-0.1.0/* --title "Warden v0.1.0" --notes "See CHANGELOG for details"
+gh release create v0.2.0 release-0.1.0/* --title "Warden v0.2.0" --notes "See CHANGELOG for details"
 ```
 
 ### Update Homebrew Formula
@@ -232,7 +240,7 @@ sha256sum release-0.1.0/warden-macos-*
 ```
 
 2. Update `warden.rb` with the new version and SHA256 hashes
-3. Test locally: `brew tap YOUR_ORG/warden --clone`
+3. Test locally: `brew tap sergiogswv/warden --clone`
 4. Submit to homebrew-core via PR
 
 ## Troubleshooting
@@ -260,8 +268,8 @@ chmod +x /usr/local/bin/warden
 ## Support & Contributions
 
 For issues or improvements:
-- Report bugs: [GitHub Issues](https://github.com/YOUR_GITHUB_REPO/issues)
-- Contribute: [GitHub Pull Requests](https://github.com/YOUR_GITHUB_REPO/pulls)
+- Report bugs: [GitHub Issues](https://github.com/sergiogswv/warden/issues)
+- Contribute: [GitHub Pull Requests](https://github.com/sergiogswv/warden/pulls)
 
 ---
 

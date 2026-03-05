@@ -3,20 +3,27 @@
 # Warden Installation Script for Linux
 # Installs Warden CLI to /usr/local/bin
 #
-# Usage:
-#   curl -fsSL https://raw.githubusercontent.com/YOUR_REPO/installers/install-linux.sh | bash
-#   Or with environment variables:
+# Usage (Development):
+#   ./installers/install-linux.sh
+#   (Automatically compiles if in project directory with changes)
+#
+# Usage (Production/Remote):
+#   curl -fsSL https://raw.githubusercontent.com/sergiogswv/warden/installers/install-linux.sh | bash
+#
+# Custom environment variables:
 #   GITHUB_REPO="owner/repo" VERSION="v0.1.0" ./install-linux.sh
 
 set -e
 
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
-GITHUB_REPO="${GITHUB_REPO:-YOUR_GITHUB_REPO}"
+GITHUB_REPO="${GITHUB_REPO:-sergiogswv/warden}"
 VERSION="${VERSION:-latest}"
 
 # Check for local binary in same directory as script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 LOCAL_BINARY="$SCRIPT_DIR/dist/warden-linux-x86_64"
+COMPILED_BINARY="$PROJECT_DIR/target/release/warden"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -85,6 +92,23 @@ echo "  • Architecture: $ARCH"
 echo "  • Install Directory: $INSTALL_DIR"
 echo
 
+# Auto-detect: if in project directory, automatically compile if needed
+if [ -f "$PROJECT_DIR/Cargo.toml" ]; then
+  # We're in the project directory - check if compilation is needed
+  if [ ! -f "$COMPILED_BINARY" ] || [ "$PROJECT_DIR/src" -nt "$COMPILED_BINARY" ] 2>/dev/null; then
+    # Source code is newer than binary, or binary doesn't exist - compile
+    echo -e "${BLUE}→ Auto-compiling Warden (source code changed)...${NC}"
+    cd "$PROJECT_DIR"
+    cargo build --release 2>&1 | tail -3
+    echo -e "${GREEN}✓ Build complete${NC}"
+    echo
+  fi
+  # Use the compiled binary (always prefer it if in project dir)
+  if [ -f "$COMPILED_BINARY" ]; then
+    LOCAL_BINARY="$COMPILED_BINARY"
+  fi
+fi
+
 # Check if installation directory is writable
 if [ ! -w "$INSTALL_DIR" ]; then
   echo -e "${RED}✗ Installation directory is not writable. Try with sudo:${NC}"
@@ -103,24 +127,27 @@ if [ -f "$LOCAL_BINARY" ]; then
   echo
 
   if compare_versions "$VERSION_INSTALLED" "$VERSION_COMPILED" "$LOCAL_BINARY" "$INSTALL_DIR/warden"; then
-    read -p "Update available. Install now? (y/n) " -n 1 -r
+    echo -e "${YELLOW}→ Update available!${NC}"
+    echo "  Auto-installing v$VERSION_COMPILED..."
     echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-      if cp "$LOCAL_BINARY" "$INSTALL_DIR/warden"; then
-        chmod +x "$INSTALL_DIR/warden"
-        echo -e "${GREEN}✓ Successfully updated warden${NC}"
-        echo
-        echo "Installation Details:"
-        echo "  • Location: $INSTALL_DIR/warden"
-        "$INSTALL_DIR/warden" --version
-        echo
-        echo -e "${GREEN}✓ Warden is ready to use!${NC}"
-        echo "  Try: warden --help"
-        exit 0
-      fi
-    else
-      echo "Skipped update"
+
+    # Auto-update without asking
+    if cp "$LOCAL_BINARY" "$INSTALL_DIR/warden"; then
+      chmod +x "$INSTALL_DIR/warden"
+      echo -e "${GREEN}✓ Successfully updated warden to v$VERSION_COMPILED${NC}"
+      echo
+      echo "Installation Details:"
+      echo "  • Location: $INSTALL_DIR/warden"
+      "$INSTALL_DIR/warden" --version
+      echo
+      echo -e "${GREEN}✓ Warden is ready to use!${NC}"
+      echo "  Try: warden --help"
       exit 0
+    else
+      echo -e "${RED}✗ Failed to update warden${NC}"
+      echo "Please try running with sudo:"
+      echo "  sudo $SCRIPT_DIR/install-linux.sh"
+      exit 1
     fi
   else
     echo -e "${GREEN}✓ Already up to date${NC}"
@@ -138,15 +165,8 @@ if ! command -v curl &> /dev/null; then
   exit 1
 fi
 
-if [ "$GITHUB_REPO" = "YOUR_GITHUB_REPO" ]; then
-  echo -e "${RED}✗ GitHub repository not configured${NC}"
-  echo
-  echo "To use the download method, set your GitHub repo:"
-  echo "  GITHUB_REPO=\"owner/repo\" GITHUB_TOKEN=\"token\" ./install-linux.sh"
-  echo
-  echo "Or place the binary in: $SCRIPT_DIR/dist/warden-linux-x86_64"
-  exit 1
-fi
+# GitHub repo is now configured, ready to download
+echo -e "${BLUE}Attempting to download from GitHub...${NC}"
 
 if curl -fsSL "$DOWNLOAD_URL" -o "$INSTALL_DIR/warden"; then
   chmod +x "$INSTALL_DIR/warden"

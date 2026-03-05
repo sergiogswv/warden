@@ -2,9 +2,9 @@
 # Installs Warden CLI to Program Files or user local bin directory
 #
 # Usage:
-#   powershell -Command "& { $(irm https://raw.githubusercontent.com/YOUR_REPO/installers/install-windows.ps1) }"
+#   powershell -Command "& { $(irm https://raw.githubusercontent.com/sergiogswv/warden/installers/install-windows.ps1) }"
 # or with elevated privileges:
-#   powershell -Command "& { $(irm https://raw.githubusercontent.com/YOUR_REPO/installers/install-windows.ps1) }" -AsAdmin
+#   powershell -Command "& { $(irm https://raw.githubusercontent.com/sergiogswv/warden/installers/install-windows.ps1) }" -AsAdmin
 
 param(
     [string]$InstallDir = "$env:LOCALAPPDATA\warden\bin",
@@ -56,7 +56,7 @@ if (-not (Test-Path $InstallDir)) {
 }
 
 # Download Warden binary
-$GithubRepo = "YOUR_GITHUB_REPO"
+$GithubRepo = "sergiogswv/warden"
 $BinaryName = "warden-windows-x64.exe"
 $DownloadUrl = "https://github.com/$GithubRepo/releases/download/$Version/$BinaryName"
 

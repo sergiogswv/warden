@@ -17,9 +17,16 @@ All version information is kept in sync:
 ### Making Changes
 
 1. Edit code as usual
-2. Compile: `cargo build --release`
-3. Check for updates: `./installers/check-updates.sh`
-4. Install: `./installers/install-linux.sh`
+2. Compile and install (all-in-one):
+   ```bash
+   ./installers/install-linux.sh --build
+   ```
+   Or separately:
+   ```bash
+   cargo build --release
+   ./installers/install-linux.sh
+   ```
+3. Verify: `warden --version`
 
 ### Creating a Release
 

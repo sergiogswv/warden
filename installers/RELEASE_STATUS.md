@@ -34,14 +34,14 @@
 
 ### From Source
 ```bash
-git clone https://github.com/YOUR_REPO/warden.git
+git clone https://github.com/sergiogswv/warden/warden.git
 cd warden
 cargo install --path .
 ```
 
 ### Linux - One-liner
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YOUR_REPO/installers/install-linux.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sergiogswv/warden/installers/install-linux.sh | bash
 ```
 
 ### macOS - Homebrew
@@ -52,7 +52,7 @@ brew install warden
 
 ### Windows - PowerShell
 ```powershell
-powershell -Command "& { $(irm https://raw.githubusercontent.com/YOUR_REPO/installers/install-windows.ps1) }"
+powershell -Command "& { $(irm https://raw.githubusercontent.com/sergiogswv/warden/installers/install-windows.ps1) }"
 ```
 
 ## Next Steps for Production Release
@@ -70,7 +70,7 @@ After release, verify with:
 
 ```bash
 # Download and install
-curl -fsSL https://raw.githubusercontent.com/YOUR_REPO/installers/install-linux.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sergiogswv/warden/installers/install-linux.sh | bash
 
 # Verify installation
 warden --version
