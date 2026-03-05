@@ -59,9 +59,84 @@ cargo build --release
 
 ---
 
+## 📦 Installation
+
+### From Source (Development)
+
+```bash
+# Clone and build
+git clone https://github.com/YOUR_REPO/warden.git
+cd warden
+cargo build --release
+
+# Install locally
+./installers/install-linux.sh
+```
+
+### From Releases (Production)
+
+```bash
+# Linux
+curl -fsSL https://raw.githubusercontent.com/YOUR_REPO/installers/install-linux.sh | bash
+
+# macOS
+brew tap YOUR_ORG/warden
+brew install warden
+
+# Windows
+powershell -Command "& { $(irm https://raw.githubusercontent.com/YOUR_REPO/installers/install-windows.ps1) }"
+```
+
+See [Installation Guide](installers/README.md) for more details.
+
+---
+
+## 🔄 Version Management & Updates
+
+### Check for Updates
+
+```bash
+# Check installed vs available version
+warden check-updates
+
+# Or use the helper script
+./installers/check-updates.sh
+```
+
+### Update Warden
+
+```bash
+# Development: recompile and install
+cargo build --release
+./installers/install-linux.sh  # Prompts if new version available
+
+# Production: download latest release
+warden update
+```
+
+### Release Process
+
+```bash
+# Update version
+echo "0.2.0" > .version
+
+# Build and test
+cargo build --release
+./target/release/warden --version
+
+# Publish (automated)
+./installers/release.sh 0.2.0
+```
+
+See [Versioning Guide](docs/VERSIONING.md) for complete details.
+
+---
+
 ## 📖 Documentation
 
-- **[Design Document](../docs/plans/2026-03-04-warden-design.md)** - Complete design and architecture
+- **[Installation Guide](installers/README.md)** - Install Warden on any platform
+- **[Version Management](docs/VERSIONING.md)** - Versioning and release process
+- **[Design Document](docs/plans/2026-03-05-installation-system-design.md)** - System architecture
 - **[CLI Commands](docs/commands.md)** - Detailed command reference
 - **[Configuration](docs/configuration.md)** - Settings and customization
 
