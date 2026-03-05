@@ -38,11 +38,15 @@ pub fn calculate_risk_scores(
             .map(|c| c.estimated_complexity)
             .unwrap_or(1.0);
 
-        let risk_value = if baseline > 0.0 {
-            ((churn * loc as f64 * authors as f64) / baseline).min(10.0)
+        let raw_risk = if baseline > 0.0 {
+            (churn * loc as f64 * authors as f64) / baseline
         } else {
             0.0
         };
+
+        // Apply size dampening for small files to reduce false positives
+        // Small files with high churn shouldn't be marked as Critical
+        let risk_value = apply_size_dampening(raw_risk, loc);
 
         let risk_level = classify_risk_level(risk_value);
         let trend = detect_churn_trend(&metrics.churn_history);
@@ -80,6 +84,24 @@ pub fn calculate_risk_scores(
     });
 
     Ok(risk_scores)
+}
+
+/// Apply size dampening to reduce false positives for small files
+/// Small files with high churn shouldn't be marked as Critical
+/// Formula: dampening_factor = sqrt(LOC / 50)
+/// This reduces risk score for files < 50 LOC while maintaining impact
+fn apply_size_dampening(risk: f64, loc: usize) -> f64 {
+    const LOC_THRESHOLD: f64 = 50.0;
+
+    if loc < 50 {
+        // Dampening factor: sqrt(LOC / 50)
+        // 21 LOC → factor = 0.65 (35% reduction)
+        // 10 LOC → factor = 0.45 (55% reduction)
+        let dampening = ((loc as f64) / LOC_THRESHOLD).sqrt();
+        (risk * dampening).min(10.0)
+    } else {
+        risk.min(10.0)
+    }
 }
 
 pub fn classify_risk_level(risk: f64) -> RiskLevel {
@@ -225,5 +247,36 @@ mod tests {
 
         // Verify sorting: first should have higher risk than second
         assert!(scores[0].risk_value >= scores[1].risk_value);
+    }
+
+    #[test]
+    fn test_size_dampening_for_small_files() {
+        // Test that small files with high churn are dampened
+        // Raw risk before dampening would be high, but should be reduced
+
+        // 21 LOC file (like poliza-liverpool.tsx)
+        let risk_small = apply_size_dampening(10.0, 21);
+        // dampening factor = sqrt(21/50) = 0.65
+        // expected: 10.0 * 0.65 = 6.5
+        assert!(risk_small < 7.0);
+        assert!(risk_small > 6.0);
+
+        // 10 LOC file (very tiny)
+        let risk_tiny = apply_size_dampening(10.0, 10);
+        // dampening factor = sqrt(10/50) = 0.45
+        // expected: 10.0 * 0.45 = 4.5
+        assert!(risk_tiny < 5.0);
+        assert!(risk_tiny > 4.0);
+
+        // 50 LOC file (at threshold)
+        let risk_threshold = apply_size_dampening(10.0, 50);
+        // dampening factor = sqrt(50/50) = 1.0
+        // expected: 10.0 (no dampening)
+        assert_eq!(risk_threshold, 10.0);
+
+        // 200 LOC file (no dampening)
+        let risk_large = apply_size_dampening(10.0, 200);
+        // No dampening for large files
+        assert_eq!(risk_large, 10.0);
     }
 }
