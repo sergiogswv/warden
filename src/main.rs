@@ -1,6 +1,6 @@
 use clap::{CommandFactory, Parser, Subcommand};
 use std::path::PathBuf;
-use warden::{git_parser, ui, cache, models, metrics, analytics};
+use warden::{git_parser, ui, cache, models, metrics, analytics, risk_scorer};
 
 #[derive(Parser)]
 #[command(name = "Warden")]
@@ -172,6 +172,11 @@ fn main() -> anyhow::Result<()> {
     println!("🔍 Analyzing trends...");
     analysis.overall_trend = analytics::detect_trend(&analysis);
 
+    // Calculate risk scores
+    println!("🎯 Calculating risk scores...");
+    let risk_scores = risk_scorer::calculate_risk_scores(&analysis.file_metrics, analysis.total_commits)?;
+    println!("   ✓ Risk scoring complete\n");
+
     // Cache results
     let _ = cache::save_cache(&repo_path, &analysis);
 
@@ -182,6 +187,7 @@ fn main() -> anyhow::Result<()> {
         }
         _ => {
             ui::show_main_menu(&analysis)?;
+            ui::render_hotspots_with_risk(&risk_scores, 10);
         }
     }
 

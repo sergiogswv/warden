@@ -139,3 +139,103 @@ pub struct AnalysisResult {
     pub overall_trend: Trend,
     pub timestamp: DateTime<Utc>,
 }
+
+/// Risk classification level
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum RiskLevel {
+    Safe,
+    Monitor,
+    Alert,
+    Critical,
+}
+
+impl fmt::Display for RiskLevel {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            RiskLevel::Safe => write!(f, "✅ Safe"),
+            RiskLevel::Monitor => write!(f, "⚠️ Monitor"),
+            RiskLevel::Alert => write!(f, "🔴 Alert"),
+            RiskLevel::Critical => write!(f, "🔴🔴 Critical"),
+        }
+    }
+}
+
+/// Churn trend direction
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ChurnTrend {
+    Improving,
+    Degrading,
+    Stable,
+}
+
+impl fmt::Display for ChurnTrend {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ChurnTrend::Improving => write!(f, "↑ Improving"),
+            ChurnTrend::Degrading => write!(f, "↓ Degrading"),
+            ChurnTrend::Stable => write!(f, "→ Stable"),
+        }
+    }
+}
+
+/// Comprehensive risk score for a file
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RiskScore {
+    pub file: String,
+    pub risk_value: f64,
+    pub risk_level: RiskLevel,
+    pub churn_percentage: f64,
+    pub loc: usize,
+    pub author_count: usize,
+    pub recent_commits: usize,
+    pub complexity: f64,
+    pub trend: ChurnTrend,
+    pub recommendation: String,
+    pub last_modified_days_ago: usize,
+}
+
+impl fmt::Display for RiskScore {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} - Risk: {:.1}/10 | {}",
+            self.file, self.risk_value, self.risk_level)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_risk_level_display() {
+        assert_eq!(format!("{}", RiskLevel::Safe), "✅ Safe");
+        assert_eq!(format!("{}", RiskLevel::Monitor), "⚠️ Monitor");
+        assert_eq!(format!("{}", RiskLevel::Alert), "🔴 Alert");
+        assert_eq!(format!("{}", RiskLevel::Critical), "🔴🔴 Critical");
+    }
+
+    #[test]
+    fn test_churn_trend_display() {
+        assert_eq!(format!("{}", ChurnTrend::Improving), "↑ Improving");
+        assert_eq!(format!("{}", ChurnTrend::Degrading), "↓ Degrading");
+        assert_eq!(format!("{}", ChurnTrend::Stable), "→ Stable");
+    }
+
+    #[test]
+    fn test_risk_score_creation() {
+        let score = RiskScore {
+            file: "test.rs".to_string(),
+            risk_value: 5.5,
+            risk_level: RiskLevel::Alert,
+            churn_percentage: 60.0,
+            loc: 200,
+            author_count: 2,
+            recent_commits: 5,
+            complexity: 6.5,
+            trend: ChurnTrend::Degrading,
+            recommendation: "Monitor".to_string(),
+            last_modified_days_ago: 3,
+        };
+        assert_eq!(score.file, "test.rs");
+        assert_eq!(score.risk_value, 5.5);
+    }
+}

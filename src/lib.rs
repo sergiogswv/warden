@@ -5,3 +5,4 @@ pub mod analytics;
 pub mod prediction;
 pub mod ui;
 pub mod cache;
+pub mod risk_scorer;

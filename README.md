@@ -31,10 +31,88 @@ Complements **Sentinel** (real-time monitoring) and **Architect Linter** (pre-co
 
 ## 📋 Core Metrics
 
-1. **LOC (Lines of Code)** - Track file size growth/shrinkage over time
-2. **Churn** - Code rotation ratio: `(deleted + modified) / total`
-3. **Author Frequency** - Which developers touch which files
-4. **Cyclomatic Complexity (Est.)** - Function length and conditional depth
+Warden calculates four core metrics to identify code quality risks:
+
+### 1. **LOC (Lines of Code)**
+- **What it measures:** Total lines of code in a file
+- **Why it matters:** Larger files are harder to understand and maintain
+- **Interpretation:**
+  - < 50 LOC: ✅ Easy to understand
+  - 50-200 LOC: ✅ Normal, manageable
+  - 200-500 LOC: ⚠️ Consider refactoring
+  - > 500 LOC: 🔴 Likely needs decomposition
+
+### 2. **Churn (Code Rotation)**
+- **What it measures:** How much of the file was rewritten recently
+- **Formula:** `(lines_added + lines_deleted) / total_lines × 100%`
+- **Interpretation:**
+  - < 20% churn: ✅ Stable, mature code
+  - 20-50% churn: ⚠️ Normal development
+  - 50-80% churn: 🔴 Highly unstable
+  - > 80% churn: 🔴🔴 Critical instability or very new file
+
+**Example:**
+```
+If a file has 100 lines and in the last 6 months:
+- 30 lines were added
+- 20 lines were deleted
+- Churn = (30 + 20) / 100 = 50%
+```
+
+### 3. **Author Frequency**
+- **What it measures:** How many different developers modified the file
+- **Why it matters:** Files touched by many authors are harder to maintain (knowledge fragmentation)
+- **Interpretation:**
+  - 1 author: ✅ Clear ownership
+  - 2-3 authors: ✅ Normal collaboration
+  - 4+ authors: ⚠️ Possible coordination issues
+
+### 4. **Cyclomatic Complexity (Estimated)**
+- **What it measures:** Code complexity estimation based on file size
+- **Formula:** `min(LOC / 50, 10)` (capped at 10.0)
+- **Why it matters:** Complex code is error-prone and hard to test
+- **Interpretation:**
+  - 1-3: ✅ Simple, easy to test
+  - 3-7: ✅ Normal complexity
+  - 7-10: 🔴 Complex, needs refactoring
+
+---
+
+## 🎯 Risk Score (Hotspot Detection)
+
+Warden combines all metrics into a **Risk Score** to identify true problem files:
+
+**Formula:**
+```
+Risk Score = (churn% × LOC × author_count) / baseline
+```
+
+**Risk Levels:**
+- 0-2: ✅ Safe zone - no action needed
+- 2-5: ⚠️ Monitor - watch for changes
+- 5-8: 🔴 Alert - consider refactoring
+- > 8: 🔴🔴 Critical - refactor immediately
+
+**Example:**
+```
+File A: Dockerfile
+- LOC: 5
+- Churn: 100%
+- Authors: 1
+- Risk: (100 × 5 × 1) / baseline = 0.5 ✅ Safe
+→ Ignore: Config files change frequently, size doesn't matter
+
+File B: src/api/client.ts
+- LOC: 450
+- Churn: 85%
+- Authors: 3
+- Risk: (85 × 450 × 3) / baseline = 11.4 🔴 Critical
+→ Action: Large file, highly modified by multiple people
+```
+
+---
+
+### Key Metrics
 
 ---
 

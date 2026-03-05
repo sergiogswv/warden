@@ -75,6 +75,46 @@ pub fn render_hotspots(analysis: &AnalysisResult, top_n: usize) -> anyhow::Resul
     Ok(())
 }
 
+pub fn render_hotspots_with_risk(risk_scores: &[crate::models::RiskScore], top_n: usize) {
+    println!("\n🏆 TOP {} HOTSPOTS (by Risk Score):", top_n);
+    println!("{}\n", "=".repeat(60));
+
+    for (i, score) in risk_scores.iter().take(top_n).enumerate() {
+        println!("{}. {}", i + 1, score.file);
+        println!("   Risk Score: {:.1}/10 {}", score.risk_value, score.risk_level);
+
+        let churn_desc = match score.churn_percentage {
+            c if c > 80.0 => "highly unstable",
+            c if c > 50.0 => "unstable",
+            c if c > 30.0 => "moderate",
+            _ => "stable",
+        };
+        println!("   ├─ Churn: {:.1}% ({})", score.churn_percentage, churn_desc);
+
+        let loc_desc = match score.loc {
+            l if l > 500 => "large file",
+            l if l > 200 => "medium file",
+            l if l > 50 => "small file",
+            _ => "tiny file",
+        };
+        println!("   ├─ LOC: {} ({})", score.loc, loc_desc);
+
+        let author_desc = match score.author_count {
+            a if a > 4 => "fragmented",
+            a if a > 2 => "shared",
+            _ => "owned",
+        };
+        println!("   ├─ Authors: {} ({})", score.author_count, author_desc);
+
+        println!("   ├─ Complexity: {:.1}/10", score.complexity);
+        println!("   ├─ Trend: {}", score.trend);
+        println!("   ├─ Recent commits: {}", score.recent_commits);
+        println!("   ├─ Last modified: {} days ago", score.last_modified_days_ago);
+        println!("   └─ Recommendation: {}", score.recommendation);
+        println!();
+    }
+}
+
 pub fn render_author_stats(_analysis: &AnalysisResult) -> anyhow::Result<()> {
     println!("👤 AUTHOR STATISTICS (coming in v0.2.0)");
     Ok(())
