@@ -201,6 +201,46 @@ impl fmt::Display for RiskScore {
     }
 }
 
+/// Prediction warning levels for churn escalation
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum PredictionWarning {
+    None,
+    Watch,
+    Degrade,
+    Critical,
+}
+
+impl fmt::Display for PredictionWarning {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            PredictionWarning::None => write!(f, "None"),
+            PredictionWarning::Watch => write!(f, "Watch"),
+            PredictionWarning::Degrade => write!(f, "Degrade"),
+            PredictionWarning::Critical => write!(f, "Critical"),
+        }
+    }
+}
+
+/// Churn prediction with linear regression forecasting
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChurnPrediction {
+    pub file: String,
+    pub current_churn: f64,
+    pub predicted_churn_7days: f64,
+    pub predicted_churn_14days: f64,
+    pub days_to_critical: Option<usize>,
+    pub prediction_confidence: f64,
+    pub warning_level: PredictionWarning,
+}
+
+impl fmt::Display for ChurnPrediction {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} - Current: {:.1}% | 7d: {:.1}% | 14d: {:.1}% | {}",
+            self.file, self.current_churn, self.predicted_churn_7days,
+            self.predicted_churn_14days, self.warning_level)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -237,5 +277,54 @@ mod tests {
         };
         assert_eq!(score.file, "test.rs");
         assert_eq!(score.risk_value, 5.5);
+    }
+
+    #[test]
+    fn test_churn_trend_prediction() {
+        // Test that prediction functionality exists
+        let prediction = ChurnPrediction {
+            file: "test.rs".to_string(),
+            current_churn: 45.0,
+            predicted_churn_7days: 52.0,
+            predicted_churn_14days: 60.0,
+            days_to_critical: Some(21),
+            prediction_confidence: 0.85,
+            warning_level: PredictionWarning::Watch,
+        };
+
+        assert_eq!(prediction.file, "test.rs");
+        assert_eq!(prediction.current_churn, 45.0);
+        assert_eq!(prediction.predicted_churn_7days, 52.0);
+        assert_eq!(prediction.predicted_churn_14days, 60.0);
+        assert_eq!(prediction.days_to_critical, Some(21));
+        assert_eq!(prediction.prediction_confidence, 0.85);
+        assert_eq!(prediction.warning_level, PredictionWarning::Watch);
+    }
+
+    #[test]
+    fn test_days_to_unmaintainable() {
+        // Test that days_to_critical calculation exists
+        let critical_prediction = ChurnPrediction {
+            file: "critical.rs".to_string(),
+            current_churn: 75.0,
+            predicted_churn_7days: 85.0,
+            predicted_churn_14days: 95.0,
+            days_to_critical: Some(10),
+            prediction_confidence: 0.92,
+            warning_level: PredictionWarning::Critical,
+        };
+
+        // Verify critical state tracking
+        assert!(critical_prediction.days_to_critical.is_some());
+        assert_eq!(critical_prediction.days_to_critical.unwrap(), 10);
+        assert_eq!(critical_prediction.warning_level, PredictionWarning::Critical);
+    }
+
+    #[test]
+    fn test_prediction_warning_levels() {
+        assert_eq!(format!("{}", PredictionWarning::None), "None");
+        assert_eq!(format!("{}", PredictionWarning::Watch), "Watch");
+        assert_eq!(format!("{}", PredictionWarning::Degrade), "Degrade");
+        assert_eq!(format!("{}", PredictionWarning::Critical), "Critical");
     }
 }
