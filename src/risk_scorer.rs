@@ -44,24 +44,30 @@ pub fn calculate_risk_scores(
             0.0
         };
 
-        // Apply size dampening for small files to reduce false positives
-        // Small files with high churn shouldn't be marked as Critical
-        let mut risk_value = apply_size_dampening(raw_risk, loc);
-
         // Calculate days since last modification for decay factor
         let last_modified_days_ago = calculate_days_since_modified(
             &metrics.churn_history
         );
 
+        // Count recent commits
+        let recent_commits = metrics.authors.iter()
+            .map(|a| a.commits)
+            .sum::<usize>();
+
+        // Apply size dampening for small files to reduce false positives
+        // Small files with high churn shouldn't be marked as Critical
+        let mut risk_value = apply_size_dampening(raw_risk, loc);
+
         // Apply decay factor for old, stable files
         // Files not modified in 30+ days are less risky
         risk_value = apply_stability_decay(risk_value, last_modified_days_ago);
 
+        // Apply recent activity dampening
+        // Isolated recent changes (1-2 commits) in small files are usually normal (bugfixes, refactors)
+        risk_value = apply_recent_activity_dampening(risk_value, recent_commits, last_modified_days_ago, loc);
+
         let risk_level = classify_risk_level(risk_value);
         let trend = detect_churn_trend(&metrics.churn_history);
-        let recent_commits = metrics.authors.iter()
-            .map(|a| a.commits)
-            .sum::<usize>();
         let recommendation = generate_recommendation(
             risk_value,
             loc,
@@ -125,6 +131,32 @@ fn apply_stability_decay(risk: f64, days_since_modified: usize) -> f64 {
     // 90 days:  factor = 0.25 (75% reduction)
     let decay_factor = 1.0 / (1.0 + (days_since_modified as f64) / 30.0);
     (risk * decay_factor).max(0.5) // Never drop below 0.5 (Safe)
+}
+
+/// Apply dampening for isolated recent changes
+/// A single recent change (1-2 commits) in a small file is usually normal:
+/// - Bugfix
+/// - Refactor
+/// - Feature implementation
+/// Not a sign of instability
+fn apply_recent_activity_dampening(
+    risk: f64,
+    recent_commits: usize,
+    days_since_modified: usize,
+    loc: usize,
+) -> f64 {
+    // Only apply if:
+    // - Modified very recently (< 7 days)
+    // - Only 1-2 commits (isolated change, not constant activity)
+    // - Small file (< 100 LOC)
+    if days_since_modified > 0 && days_since_modified <= 7 && recent_commits <= 2 && loc < 100 {
+        // Dampening factor: 0.5 (50% reduction)
+        // This acknowledges that isolated recent changes are normal
+        // 3.8 * 0.5 = 1.9 (Safe instead of Monitor)
+        (risk * 0.5).max(0.5)
+    } else {
+        risk
+    }
 }
 
 pub fn classify_risk_level(risk: f64) -> RiskLevel {
@@ -335,5 +367,43 @@ mod tests {
         let very_old = apply_stability_decay(1.0, 365);
         // Should not go below 0.5
         assert_eq!(very_old, 0.5);
+    }
+
+    #[test]
+    fn test_recent_activity_dampening() {
+        // Test isolated recent changes (bugfixes, refactors)
+
+        // Case 1: lead-detail-error.tsx scenario
+        // 2 days ago, 1 commit, 21 LOC
+        let isolated_recent = apply_recent_activity_dampening(3.8, 1, 2, 21);
+        // Should apply 50% dampening: 3.8 * 0.5 = 1.9
+        assert!(isolated_recent < 2.0);
+        assert!(isolated_recent > 1.8);
+
+        // Case 2: 2 commits in 3 days, 50 LOC
+        let two_commits = apply_recent_activity_dampening(5.0, 2, 3, 50);
+        // Should apply 50% dampening: 5.0 * 0.5 = 2.5
+        assert!(two_commits < 2.6);
+        assert!(two_commits > 2.4);
+
+        // Case 3: NO dampening - too many commits
+        let many_commits = apply_recent_activity_dampening(3.8, 5, 2, 21);
+        // 5 commits = unstable, no dampening
+        assert_eq!(many_commits, 3.8);
+
+        // Case 4: NO dampening - old file
+        let old_file = apply_recent_activity_dampening(3.8, 1, 30, 21);
+        // > 7 days, no dampening
+        assert_eq!(old_file, 3.8);
+
+        // Case 5: NO dampening - large file
+        let large_file = apply_recent_activity_dampening(3.8, 1, 2, 200);
+        // > 100 LOC, no dampening
+        assert_eq!(large_file, 3.8);
+
+        // Case 6: Verify floor at 0.5 minimum
+        let very_low = apply_recent_activity_dampening(0.8, 1, 2, 21);
+        // 0.8 * 0.5 = 0.4, but capped at 0.5
+        assert_eq!(very_low, 0.5);
     }
 }
