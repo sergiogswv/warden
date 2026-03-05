@@ -3,7 +3,7 @@
 **Historical code quality analysis and predictive architecture insights for modern development teams.**
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.0-blue.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.3.0-blue.svg" alt="Version">
   <img src="https://img.shields.io/badge/rust-2024-orange.svg" alt="Rust">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
 </p>
