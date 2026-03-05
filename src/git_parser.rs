@@ -84,9 +84,9 @@ pub fn parse_git_history(repo_path: &Path, period: &str) -> anyhow::Result<Vec<E
                 });
             }
         } else if !line.is_empty() {
-            // This is a filename - skip if ignored by .gitignore
+            // This is a filename - skip if ignored by .gitignore or excluded by extension
             if let Some(ref mut commit) = current_commit {
-                if !should_ignore_file(repo_path, line) {
+                if !should_ignore_file(repo_path, line) && !should_exclude_by_extension(line) {
                     commit.files.push(line.to_string());
                 }
             }
@@ -114,8 +114,8 @@ pub fn parse_git_history(repo_path: &Path, period: &str) -> anyhow::Result<Vec<E
                 if let Some(pipe_idx) = line.find('|') {
                     let file = line[..pipe_idx].trim();
 
-                    // Skip files that are gitignored
-                    if should_ignore_file(repo_path, file) {
+                    // Skip files that are gitignored or excluded by extension
+                    if should_ignore_file(repo_path, file) || should_exclude_by_extension(file) {
                         continue;
                     }
 
@@ -160,6 +160,36 @@ fn should_ignore_file(repo_path: &Path, file: &str) -> bool {
     }
 
     false
+}
+
+/// Check if a file should be excluded based on its extension
+/// Excludes: documentation, config, assets, and non-source files
+fn should_exclude_by_extension(file: &str) -> bool {
+    let excluded_extensions = [
+        // Documentation
+        ".md", ".txt", ".rst", ".adoc",
+        // Configuration
+        ".yml", ".yaml", ".toml", ".json", ".xml", ".ini", ".conf", ".config",
+        // Assets
+        ".svg", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".webp",
+        // Style/Formatting
+        ".css", ".scss", ".less",
+        // Build/Dist
+        ".lock", ".min.js", ".min.css",
+        // Other non-source
+        ".pdf", ".doc", ".docx",
+    ];
+
+    // Check if ends with any excluded extension
+    if excluded_extensions.iter().any(|ext| file.ends_with(ext)) {
+        return true;
+    }
+
+    // Also exclude dotfiles (except .gitignore, .env, etc are already excluded above)
+    // Exclude common config dotfiles
+    let excluded_dotfiles = [".env", ".gitignore", ".editorconfig", ".eslintrc"];
+    let file_name = file.split('/').last().unwrap_or(file);
+    excluded_dotfiles.iter().any(|name| *name == file_name)
 }
 
 fn parse_period(period: &str) -> String {
@@ -250,5 +280,31 @@ mod tests {
 
         // Source files should NOT be ignored
         assert!(!should_ignore_file(repo_path, "src/main.rs"));
+    }
+
+    #[test]
+    fn test_exclude_by_extension() {
+        // Documentation files should be excluded
+        assert!(should_exclude_by_extension("README.md"));
+        assert!(should_exclude_by_extension("docs/guide.md"));
+        assert!(should_exclude_by_extension("notes.txt"));
+
+        // Configuration files should be excluded
+        assert!(should_exclude_by_extension("config.yml"));
+        assert!(should_exclude_by_extension("package.json"));
+        assert!(should_exclude_by_extension("Cargo.toml"));
+        assert!(should_exclude_by_extension(".env"));
+        assert!(should_exclude_by_extension("settings.json"));
+
+        // Asset files should be excluded
+        assert!(should_exclude_by_extension("logo.svg"));
+        assert!(should_exclude_by_extension("image.png"));
+        assert!(should_exclude_by_extension("style.css"));
+
+        // Source files should NOT be excluded
+        assert!(!should_exclude_by_extension("src/main.rs"));
+        assert!(!should_exclude_by_extension("app.tsx"));
+        assert!(!should_exclude_by_extension("utils.js"));
+        assert!(!should_exclude_by_extension("test.py"));
     }
 }
