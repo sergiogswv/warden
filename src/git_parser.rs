@@ -84,9 +84,11 @@ pub fn parse_git_history(repo_path: &Path, period: &str) -> anyhow::Result<Vec<E
                 });
             }
         } else if !line.is_empty() {
-            // This is a filename
+            // This is a filename - skip if ignored by .gitignore
             if let Some(ref mut commit) = current_commit {
-                commit.files.push(line.to_string());
+                if !should_ignore_file(repo_path, line) {
+                    commit.files.push(line.to_string());
+                }
             }
         }
     }
@@ -111,6 +113,12 @@ pub fn parse_git_history(repo_path: &Path, period: &str) -> anyhow::Result<Vec<E
                 // Parse lines like: src/main.rs | 45 +++++++++++
                 if let Some(pipe_idx) = line.find('|') {
                     let file = line[..pipe_idx].trim();
+
+                    // Skip files that are gitignored
+                    if should_ignore_file(repo_path, file) {
+                        continue;
+                    }
+
                     let stats = line[pipe_idx+1..].trim();
 
                     let mut additions = 0;
@@ -135,6 +143,23 @@ pub fn parse_git_history(repo_path: &Path, period: &str) -> anyhow::Result<Vec<E
     }
 
     Ok(commits)
+}
+
+/// Check if a file should be ignored based on .gitignore rules
+fn should_ignore_file(repo_path: &Path, file: &str) -> bool {
+    // Use git check-ignore to determine if file is ignored
+    let output = Command::new("git")
+        .current_dir(repo_path)
+        .arg("check-ignore")
+        .arg(file)
+        .output();
+
+    // If git check-ignore succeeds (exit code 0), the file is ignored
+    if let Ok(out) = output {
+        return out.status.success();
+    }
+
+    false
 }
 
 fn parse_period(period: &str) -> String {
@@ -207,5 +232,23 @@ mod tests {
             assert!(!first.hash.is_empty());
             assert!(!first.author.is_empty());
         }
+    }
+
+    #[test]
+    fn test_gitignore_filtering() {
+        let repo_path = std::path::Path::new(".");
+
+        // .gitignore patterns should be respected
+        // target/ directory is in .gitignore
+        assert!(should_ignore_file(repo_path, "target/debug/binary"));
+
+        // Cargo.lock is in .gitignore
+        assert!(should_ignore_file(repo_path, "Cargo.lock"));
+
+        // .warden-cache is in .gitignore
+        assert!(should_ignore_file(repo_path, ".warden-cache"));
+
+        // Source files should NOT be ignored
+        assert!(!should_ignore_file(repo_path, "src/main.rs"));
     }
 }
