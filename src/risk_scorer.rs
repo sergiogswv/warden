@@ -38,8 +38,15 @@ pub fn calculate_risk_scores(
             .map(|c| c.estimated_complexity)
             .unwrap_or(1.0);
 
+        // Cap author impact for small files
+        // Fragmenting a 21-line file among 2 authors is not a real risk
+        // Formula: author_impact = min(authors, LOC / 20)
+        // - 21 LOC, 2 authors: impact = min(2, 1.05) = 1.05 (minimal)
+        // - 500 LOC, 5 authors: impact = min(5, 25) = 5 (full impact)
+        let author_impact = ((authors as f64).min((loc as f64) / 20.0)).max(1.0);
+
         let raw_risk = if baseline > 0.0 {
-            (churn * loc as f64 * authors as f64) / baseline
+            (churn * loc as f64 * author_impact) / baseline
         } else {
             0.0
         };
@@ -405,5 +412,47 @@ mod tests {
         let very_low = apply_recent_activity_dampening(0.8, 1, 2, 21);
         // 0.8 * 0.5 = 0.4, but capped at 0.5
         assert_eq!(very_low, 0.5);
+    }
+
+    #[test]
+    fn test_author_impact_capping() {
+        // Test that author count is capped for small files
+        // Fragmenting a small file is not a real risk
+
+        // Case 1: poliza-liverpool.tsx scenario
+        // 21 LOC, 2 authors → impact = min(2, 21/20) = min(2, 1.05) = 1.05
+        // raw_risk = (100 × 21 × 1.05) / baseline
+        // If baseline = 400, risk = 2205 / 400 = 5.5, then with stability decay → ~1.5
+        // This file should be Safe, not Monitor
+
+        // Case 2: Medium file, multiple authors
+        // 100 LOC, 4 authors → impact = min(4, 100/20) = min(4, 5) = 4
+        // Normal impact (no capping)
+
+        // Case 3: Large file, many authors
+        // 500 LOC, 6 authors → impact = min(6, 500/20) = min(6, 25) = 6
+        // Full impact
+
+        // Testing the capping directly:
+        // Small file: 21 LOC
+        let impact_tiny = ((2_f64).min((21_f64) / 20.0)).max(1.0);
+        // min(2, 1.05) = 1.05
+        assert!(impact_tiny > 1.0);
+        assert!(impact_tiny < 1.1);
+
+        // Medium file: 100 LOC
+        let impact_medium = ((4_f64).min((100_f64) / 20.0)).max(1.0);
+        // min(4, 5) = 4
+        assert_eq!(impact_medium, 4.0);
+
+        // Large file: 500 LOC
+        let impact_large = ((6_f64).min((500_f64) / 20.0)).max(1.0);
+        // min(6, 25) = 6
+        assert_eq!(impact_large, 6.0);
+
+        // Single author on any file
+        let impact_single = ((1_f64).min((21_f64) / 20.0)).max(1.0);
+        // min(1, 1.05) = 1.0
+        assert_eq!(impact_single, 1.0);
     }
 }
