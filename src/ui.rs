@@ -22,7 +22,8 @@ pub fn show_main_menu(analysis: &AnalysisResult) -> anyhow::Result<()> {
     println!();
 
     render_alerts(analysis)?;
-    render_hotspots(analysis, 10)?;
+    // Note: render_hotspots (old churn-based) has been replaced by
+    // render_hotspots_with_risk (intelligent risk scoring) in main.rs
 
     Ok(())
 }
