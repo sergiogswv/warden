@@ -2,7 +2,7 @@
 //!
 //! Forecasts future code quality problems using linear regression.
 
-use crate::models::{Prediction, AlertSeverity, AnalysisResult};
+use crate::models::{AlertSeverity, AnalysisResult, Prediction};
 
 pub struct PredictionEngine;
 
@@ -16,7 +16,10 @@ impl PredictionEngine {
                     predictions.push(Prediction {
                         file: file.clone(),
                         severity: AlertSeverity::Critical,
-                        message: format!("File has {:.1}% churn - will become unmaintainable soon", latest_churn),
+                        message: format!(
+                            "File has {:.1}% churn - will become unmaintainable soon",
+                            latest_churn
+                        ),
                         days_to_unmaintainable: Some(14),
                         confidence: 0.85,
                     });
@@ -78,7 +81,9 @@ pub fn calculate_r_squared(actual: &[f64], predicted: &[f64]) -> f64 {
 
     let mean_actual = actual.iter().sum::<f64>() / actual.len() as f64;
     let ss_total: f64 = actual.iter().map(|y| (y - mean_actual).powi(2)).sum();
-    let ss_res: f64 = actual.iter().zip(predicted.iter())
+    let ss_res: f64 = actual
+        .iter()
+        .zip(predicted.iter())
         .map(|(y, y_pred)| (y - y_pred).powi(2))
         .sum();
 

@@ -1,9 +1,9 @@
-pub mod models;
+pub mod analytics;
+pub mod cache;
 pub mod git_parser;
 pub mod metrics;
-pub mod analytics;
+pub mod models;
 pub mod prediction;
-pub mod ui;
-pub mod cache;
-pub mod risk_scorer;
 pub mod predictor;
+pub mod risk_scorer;
+pub mod ui;

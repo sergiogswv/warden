@@ -1,8 +1,8 @@
 //! Risk scoring engine for hotspot detection
 
 use crate::models::*;
-use std::collections::HashMap;
 use chrono::Utc;
+use std::collections::HashMap;
 
 /// Calculate risk scores for all files in metrics
 pub fn calculate_risk_scores(
@@ -33,7 +33,8 @@ pub fn calculate_risk_scores(
         let churn = metrics.latest_churn().unwrap_or(0.0);
         let loc = metrics.latest_loc().unwrap_or(0);
         let authors = metrics.total_authors();
-        let complexity = metrics.complexity_history
+        let complexity = metrics
+            .complexity_history
             .last()
             .map(|c| c.estimated_complexity)
             .unwrap_or(1.0);
@@ -52,14 +53,10 @@ pub fn calculate_risk_scores(
         };
 
         // Calculate days since last modification for decay factor
-        let last_modified_days_ago = calculate_days_since_modified(
-            &metrics.churn_history
-        );
+        let last_modified_days_ago = calculate_days_since_modified(&metrics.churn_history);
 
         // Count recent commits
-        let recent_commits = metrics.authors.iter()
-            .map(|a| a.commits)
-            .sum::<usize>();
+        let recent_commits = metrics.authors.iter().map(|a| a.commits).sum::<usize>();
 
         // Apply size dampening for small files to reduce false positives
         // Small files with high churn shouldn't be marked as Critical
@@ -71,16 +68,16 @@ pub fn calculate_risk_scores(
 
         // Apply recent activity dampening
         // Isolated recent changes (1-2 commits) in small files are usually normal (bugfixes, refactors)
-        risk_value = apply_recent_activity_dampening(risk_value, recent_commits, last_modified_days_ago, loc);
+        risk_value = apply_recent_activity_dampening(
+            risk_value,
+            recent_commits,
+            last_modified_days_ago,
+            loc,
+        );
 
         let risk_level = classify_risk_level(risk_value);
         let trend = detect_churn_trend(&metrics.churn_history);
-        let recommendation = generate_recommendation(
-            risk_value,
-            loc,
-            authors,
-            &trend,
-        );
+        let recommendation = generate_recommendation(risk_value, loc, authors, &trend);
 
         risk_scores.push(RiskScore {
             file: filename.clone(),
@@ -98,9 +95,7 @@ pub fn calculate_risk_scores(
     }
 
     // Sort by risk (descending)
-    risk_scores.sort_by(|a, b| {
-        b.risk_value.partial_cmp(&a.risk_value).unwrap()
-    });
+    risk_scores.sort_by(|a, b| b.risk_value.partial_cmp(&a.risk_value).unwrap());
 
     Ok(risk_scores)
 }
@@ -192,12 +187,7 @@ fn detect_churn_trend(churn_history: &[ChurnMetric]) -> ChurnTrend {
     }
 }
 
-fn generate_recommendation(
-    risk: f64,
-    loc: usize,
-    authors: usize,
-    trend: &ChurnTrend,
-) -> String {
+fn generate_recommendation(risk: f64, loc: usize, authors: usize, trend: &ChurnTrend) -> String {
     if risk > 8.0 && loc > 200 {
         "Refactor immediately - large, unstable file".to_string()
     } else if risk > 5.0 && authors > 3 {

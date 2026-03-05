@@ -1,6 +1,6 @@
 use clap::{CommandFactory, Parser, Subcommand};
 use std::path::PathBuf;
-use warden::{git_parser, ui, cache, models, metrics, analytics, risk_scorer};
+use warden::{analytics, cache, git_parser, metrics, models, risk_scorer, ui};
 
 #[derive(Parser)]
 #[command(name = "Warden")]
@@ -72,9 +72,9 @@ fn main() -> anyhow::Result<()> {
             let version = env!("CARGO_PKG_VERSION");
             println!("Warden v{}", version);
             if let Ok(build_dir) = std::env::var("CARGO_MANIFEST_DIR") {
-                if let Ok(version_file) = std::fs::read_to_string(
-                    std::path::PathBuf::from(build_dir).join(".version")
-                ) {
+                if let Ok(version_file) =
+                    std::fs::read_to_string(std::path::PathBuf::from(build_dir).join(".version"))
+                {
                     println!("  Version file: {}", version_file.trim());
                 }
             }
@@ -136,8 +136,8 @@ fn main() -> anyhow::Result<()> {
 
     // Parse git history
     println!("🔍 Parsing Git history...");
-    let commits = git_parser::parse_git_history(&repo_path, &args.history)
-        .unwrap_or_else(|_| vec![]);
+    let commits =
+        git_parser::parse_git_history(&repo_path, &args.history).unwrap_or_else(|_| vec![]);
 
     println!("   ✓ {} commits analyzed", commits.len());
 
@@ -147,10 +147,8 @@ fn main() -> anyhow::Result<()> {
     println!("   ✓ {} files analyzed", file_metrics.len());
 
     // Count unique authors
-    let unique_authors: std::collections::HashSet<_> = commits
-        .iter()
-        .map(|c| c.author.clone())
-        .collect();
+    let unique_authors: std::collections::HashSet<_> =
+        commits.iter().map(|c| c.author.clone()).collect();
 
     println!("👥 Identified {} unique authors", unique_authors.len());
 
@@ -162,7 +160,7 @@ fn main() -> anyhow::Result<()> {
         files_analyzed: file_metrics.len(),
         total_commits: commits.len(),
         authors_count: unique_authors.len(),
-        file_metrics,  // Now has real data
+        file_metrics, // Now has real data
         predictions: vec![],
         overall_trend: models::Trend::Stable,
         timestamp: Utc::now(),
@@ -174,7 +172,8 @@ fn main() -> anyhow::Result<()> {
 
     // Calculate risk scores
     println!("🎯 Calculating risk scores...");
-    let risk_scores = risk_scorer::calculate_risk_scores(&analysis.file_metrics, analysis.total_commits)?;
+    let risk_scores =
+        risk_scorer::calculate_risk_scores(&analysis.file_metrics, analysis.total_commits)?;
     println!("   ✓ Risk scoring complete\n");
 
     // Cache results

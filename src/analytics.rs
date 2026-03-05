@@ -96,7 +96,10 @@ mod tests {
 
     #[test]
     fn test_detect_trend() {
-        assert_eq!(AnalyticsEngine::detect_trend(&create_test_analysis()), Trend::Stable);
+        assert_eq!(
+            AnalyticsEngine::detect_trend(&create_test_analysis()),
+            Trend::Stable
+        );
     }
 
     #[test]
@@ -127,21 +130,27 @@ mod tests {
             churn_percentage: 70.0,
         });
 
-        file_metrics.insert("main.rs".to_string(), crate::models::FileMetrics {
-            file: "main.rs".to_string(),
-            loc_history: vec![],
-            churn_history: churn_history1,
-            authors: vec![],
-            complexity_history: vec![],
-        });
+        file_metrics.insert(
+            "main.rs".to_string(),
+            crate::models::FileMetrics {
+                file: "main.rs".to_string(),
+                loc_history: vec![],
+                churn_history: churn_history1,
+                authors: vec![],
+                complexity_history: vec![],
+            },
+        );
 
-        file_metrics.insert("lib.rs".to_string(), crate::models::FileMetrics {
-            file: "lib.rs".to_string(),
-            loc_history: vec![],
-            churn_history: churn_history2,
-            authors: vec![],
-            complexity_history: vec![],
-        });
+        file_metrics.insert(
+            "lib.rs".to_string(),
+            crate::models::FileMetrics {
+                file: "lib.rs".to_string(),
+                loc_history: vec![],
+                churn_history: churn_history2,
+                authors: vec![],
+                complexity_history: vec![],
+            },
+        );
 
         let analysis = AnalysisResult {
             repository_path: ".".to_string(),
@@ -156,12 +165,16 @@ mod tests {
         };
 
         let trend = detect_trend(&analysis);
-        assert_eq!(trend, Trend::Degrading, "High churn (avg 72.5%) should be detected as Degrading");
+        assert_eq!(
+            trend,
+            Trend::Degrading,
+            "High churn (avg 72.5%) should be detected as Degrading"
+        );
     }
 
     fn create_test_analysis() -> AnalysisResult {
-        use std::collections::HashMap;
         use chrono::Utc;
+        use std::collections::HashMap;
 
         AnalysisResult {
             repository_path: ".".to_string(),

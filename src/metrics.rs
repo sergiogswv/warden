@@ -2,7 +2,7 @@
 //!
 //! Calculates LOC, Churn, Author Frequency, and Complexity metrics.
 
-use crate::models::{ChurnMetric, ComplexityMetric, FileMetrics, LOCMetric, AuthorFrequency};
+use crate::models::{AuthorFrequency, ChurnMetric, ComplexityMetric, FileMetrics, LOCMetric};
 use std::collections::HashMap;
 
 pub struct MetricsCalculator {
@@ -37,29 +37,39 @@ impl MetricsCalculator {
     }
 
     pub fn aggregate_file_metrics(&self, file: &str) -> FileMetrics {
-        let loc_history = self.loc_by_file_by_date
+        let loc_history = self
+            .loc_by_file_by_date
             .get(file)
             .map(|history| {
-                history.iter().map(|(date, lines)| LOCMetric {
-                    file: file.to_string(),
-                    timestamp: *date,
-                    lines: *lines,
-                }).collect()
+                history
+                    .iter()
+                    .map(|(date, lines)| LOCMetric {
+                        file: file.to_string(),
+                        timestamp: *date,
+                        lines: *lines,
+                    })
+                    .collect()
             })
             .unwrap_or_default();
 
-        let churn_history = self.churn_by_file
+        let churn_history = self
+            .churn_by_file
             .get(file)
             .map(|churn_entries| {
-                churn_entries.iter().map(|(timestamp, churn_percentage)| ChurnMetric {
-                    file: file.to_string(),
-                    timestamp: *timestamp,
-                    churn_percentage: *churn_percentage,
-                }).collect()
+                churn_entries
+                    .iter()
+                    .map(|(timestamp, churn_percentage)| ChurnMetric {
+                        file: file.to_string(),
+                        timestamp: *timestamp,
+                        churn_percentage: *churn_percentage,
+                    })
+                    .collect()
             })
             .unwrap_or_default();
 
-        let authors = self.author_frequency.iter()
+        let authors = self
+            .author_frequency
+            .iter()
             .filter(|((f, _), _)| f == file)
             .map(|((_, author), commits)| AuthorFrequency {
                 file: file.to_string(),
@@ -79,9 +89,9 @@ impl MetricsCalculator {
     }
 }
 
-pub fn process_commits(enriched_commits: &[crate::git_parser::EnrichedCommit])
-    -> anyhow::Result<HashMap<String, FileMetrics>>
-{
+pub fn process_commits(
+    enriched_commits: &[crate::git_parser::EnrichedCommit],
+) -> anyhow::Result<HashMap<String, FileMetrics>> {
     let mut calculator = MetricsCalculator::new();
     let mut file_metrics: HashMap<String, FileMetrics> = HashMap::new();
 
@@ -93,12 +103,13 @@ pub fn process_commits(enriched_commits: &[crate::git_parser::EnrichedCommit])
 
             // Use current LOC (stored in deletions field) if available, else use estimated
             let current_loc = if change.deletions > 0 {
-                change.deletions  // Current LOC from git show HEAD:file
+                change.deletions // Current LOC from git show HEAD:file
             } else {
-                change.additions + change.deletions  // Fallback to sum
+                change.additions + change.deletions // Fallback to sum
             };
 
-            calculator.loc_by_file_by_date
+            calculator
+                .loc_by_file_by_date
                 .entry(file.clone())
                 .or_insert_with(Vec::new)
                 .push((dt, current_loc));
@@ -110,7 +121,8 @@ pub fn process_commits(enriched_commits: &[crate::git_parser::EnrichedCommit])
             // For churn calculation, use current LOC as the denominator
             if current_loc > 0 {
                 let churn = calculator.calculate_churn(change.additions, 0, current_loc);
-                calculator.churn_by_file
+                calculator
+                    .churn_by_file
                     .entry(file.clone())
                     .or_insert_with(Vec::new)
                     .push((dt, churn));
@@ -171,25 +183,26 @@ mod tests {
 
     #[test]
     fn test_process_commits_populates_file_metrics() {
-        use std::collections::HashMap;
         use crate::git_parser::{EnrichedCommit, FileChange};
+        use std::collections::HashMap;
 
         let mut changes = HashMap::new();
-        changes.insert("main.rs".to_string(), FileChange {
-            file: "main.rs".to_string(),
-            additions: 50,
-            deletions: 10,
-        });
-
-        let commits = vec![
-            EnrichedCommit {
-                hash: "abc123".to_string(),
-                author: "alice".to_string(),
-                timestamp: 1000,
-                files: vec!["main.rs".to_string()],
-                file_changes: changes,
+        changes.insert(
+            "main.rs".to_string(),
+            FileChange {
+                file: "main.rs".to_string(),
+                additions: 50,
+                deletions: 10,
             },
-        ];
+        );
+
+        let commits = vec![EnrichedCommit {
+            hash: "abc123".to_string(),
+            author: "alice".to_string(),
+            timestamp: 1000,
+            files: vec!["main.rs".to_string()],
+            file_changes: changes,
+        }];
 
         let metrics = process_commits(&commits).unwrap();
 
@@ -199,22 +212,28 @@ mod tests {
 
     #[test]
     fn test_process_commits_calculates_churn() {
-        use std::collections::HashMap;
         use crate::git_parser::{EnrichedCommit, FileChange};
+        use std::collections::HashMap;
 
         let mut changes1 = HashMap::new();
-        changes1.insert("main.rs".to_string(), FileChange {
-            file: "main.rs".to_string(),
-            additions: 100,
-            deletions: 100,
-        });
+        changes1.insert(
+            "main.rs".to_string(),
+            FileChange {
+                file: "main.rs".to_string(),
+                additions: 100,
+                deletions: 100,
+            },
+        );
 
         let mut changes2 = HashMap::new();
-        changes2.insert("main.rs".to_string(), FileChange {
-            file: "main.rs".to_string(),
-            additions: 50,
-            deletions: 50,
-        });
+        changes2.insert(
+            "main.rs".to_string(),
+            FileChange {
+                file: "main.rs".to_string(),
+                additions: 50,
+                deletions: 50,
+            },
+        );
 
         let commits = vec![
             EnrichedCommit {

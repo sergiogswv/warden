@@ -32,8 +32,16 @@ mod model_tests {
         let file_metrics = FileMetrics {
             file: "test.rs".to_string(),
             loc_history: vec![
-                LOCMetric { file: "test.rs".to_string(), timestamp: Utc::now(), lines: 100 },
-                LOCMetric { file: "test.rs".to_string(), timestamp: Utc::now(), lines: 150 },
+                LOCMetric {
+                    file: "test.rs".to_string(),
+                    timestamp: Utc::now(),
+                    lines: 100,
+                },
+                LOCMetric {
+                    file: "test.rs".to_string(),
+                    timestamp: Utc::now(),
+                    lines: 150,
+                },
             ],
             churn_history: vec![],
             authors: vec![],
@@ -48,8 +56,16 @@ mod model_tests {
             file: "test.rs".to_string(),
             loc_history: vec![],
             churn_history: vec![
-                ChurnMetric { file: "test.rs".to_string(), timestamp: Utc::now(), churn_percentage: 30.0 },
-                ChurnMetric { file: "test.rs".to_string(), timestamp: Utc::now(), churn_percentage: 60.0 },
+                ChurnMetric {
+                    file: "test.rs".to_string(),
+                    timestamp: Utc::now(),
+                    churn_percentage: 30.0,
+                },
+                ChurnMetric {
+                    file: "test.rs".to_string(),
+                    timestamp: Utc::now(),
+                    churn_percentage: 60.0,
+                },
             ],
             authors: vec![],
             complexity_history: vec![],

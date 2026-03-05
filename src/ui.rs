@@ -41,7 +41,8 @@ pub fn render_alerts(analysis: &AnalysisResult) -> anyhow::Result<()> {
 
     println!("⚠️  PREDICTIVE ALERTS:");
     for pred in &analysis.predictions {
-        let days = pred.days_to_unmaintainable
+        let days = pred
+            .days_to_unmaintainable
             .map(|d| d.to_string())
             .unwrap_or_else(|| "-".to_string());
         println!("   [{:?}] {} - {}", pred.severity, pred.file, days);
@@ -52,7 +53,9 @@ pub fn render_alerts(analysis: &AnalysisResult) -> anyhow::Result<()> {
 }
 
 pub fn render_hotspots(analysis: &AnalysisResult, top_n: usize) -> anyhow::Result<()> {
-    let mut hotspots: Vec<_> = analysis.file_metrics.iter()
+    let mut hotspots: Vec<_> = analysis
+        .file_metrics
+        .iter()
         .map(|(file, metrics)| {
             let churn = metrics.latest_churn().unwrap_or(0.0);
             let loc = metrics.latest_loc().unwrap_or(0);
@@ -130,7 +133,10 @@ pub fn render_hotspots_with_risk(risk_scores: &[crate::models::RiskScore], top_n
 
     for (i, score) in risk_scores.iter().take(top_n).enumerate() {
         println!("{}. {}", i + 1, score.file);
-        println!("   Risk Score: {:.1}/10 {}", score.risk_value, score.risk_level);
+        println!(
+            "   Risk Score: {:.1}/10 {}",
+            score.risk_value, score.risk_level
+        );
 
         let churn_desc = get_contextual_churn_description(
             score.churn_percentage,
@@ -138,7 +144,10 @@ pub fn render_hotspots_with_risk(risk_scores: &[crate::models::RiskScore], top_n
             score.recent_commits,
             score.last_modified_days_ago,
         );
-        println!("   ├─ Churn: {:.1}% ({})", score.churn_percentage, churn_desc);
+        println!(
+            "   ├─ Churn: {:.1}% ({})",
+            score.churn_percentage, churn_desc
+        );
 
         let loc_desc = match score.loc {
             l if l > 500 => "large file",
@@ -158,7 +167,10 @@ pub fn render_hotspots_with_risk(risk_scores: &[crate::models::RiskScore], top_n
         println!("   ├─ Complexity: {:.1}/10", score.complexity);
         println!("   ├─ Trend: {}", score.trend);
         println!("   ├─ Recent commits: {}", score.recent_commits);
-        println!("   ├─ Last modified: {} days ago", score.last_modified_days_ago);
+        println!(
+            "   ├─ Last modified: {} days ago",
+            score.last_modified_days_ago
+        );
         println!("   └─ Recommendation: {}", score.recommendation);
         println!();
     }

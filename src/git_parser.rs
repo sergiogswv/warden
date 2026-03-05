@@ -2,9 +2,9 @@
 //!
 //! Extracts commit history, file changes, and metadata from Git repositories.
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
-use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct Commit {
@@ -47,7 +47,7 @@ pub fn parse_git_history(repo_path: &Path, period: &str) -> anyhow::Result<Vec<E
 
     // Add period filter if specified
     if period != "all" {
-        cmd.arg(format!("--since={}",  parse_period(period)));
+        cmd.arg(format!("--since={}", parse_period(period)));
     }
 
     // Format: hash|author|timestamp|files
@@ -119,7 +119,7 @@ pub fn parse_git_history(repo_path: &Path, period: &str) -> anyhow::Result<Vec<E
                         continue;
                     }
 
-                    let stats = line[pipe_idx+1..].trim();
+                    let stats = line[pipe_idx + 1..].trim();
 
                     let mut additions = 0;
                     let mut deletions = 0;
@@ -136,11 +136,14 @@ pub fn parse_git_history(repo_path: &Path, period: &str) -> anyhow::Result<Vec<E
                     }
 
                     if additions > 0 {
-                        commit.file_changes.insert(file.to_string(), FileChange {
-                            file: file.to_string(),
-                            additions,
-                            deletions: 0,
-                        });
+                        commit.file_changes.insert(
+                            file.to_string(),
+                            FileChange {
+                                file: file.to_string(),
+                                additions,
+                                deletions: 0,
+                            },
+                        );
                     }
                 }
             }
@@ -211,16 +214,12 @@ fn should_ignore_file(repo_path: &Path, file: &str) -> bool {
 fn should_exclude_by_extension(file: &str) -> bool {
     let excluded_extensions = [
         // Documentation
-        ".md", ".txt", ".rst", ".adoc",
-        // Configuration
+        ".md", ".txt", ".rst", ".adoc", // Configuration
         ".yml", ".yaml", ".toml", ".json", ".xml", ".ini", ".conf", ".config",
         // Assets
-        ".svg", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".webp",
-        // Style/Formatting
-        ".css", ".scss", ".less",
-        // Build/Dist
-        ".lock", ".min.js", ".min.css",
-        // Other non-source
+        ".svg", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".webp", // Style/Formatting
+        ".css", ".scss", ".less", // Build/Dist
+        ".lock", ".min.js", ".min.css", // Other non-source
         ".pdf", ".doc", ".docx",
     ];
 
@@ -242,8 +241,8 @@ fn parse_period(period: &str) -> String {
         "6m" => "6 months ago".to_string(),
         "1y" => "1 year ago".to_string(),
         "2y" => "2 years ago".to_string(),
-        s if s.ends_with('m') => format!("{} months ago", &s[..s.len()-1]),
-        s if s.ends_with('y') => format!("{} years ago", &s[..s.len()-1]),
+        s if s.ends_with('m') => format!("{} months ago", &s[..s.len() - 1]),
+        s if s.ends_with('y') => format!("{} years ago", &s[..s.len() - 1]),
         s => s.to_string(),
     }
 }
@@ -260,10 +259,7 @@ mod tests {
     fn test_parse_git_history_returns_result_type() {
         // Verify the function returns an anyhow::Result
         // This validates error handling is in place
-        let result = parse_git_history(
-            std::path::Path::new("."),
-            "all"
-        );
+        let result = parse_git_history(std::path::Path::new("."), "all");
 
         // Result should be Ok (we're in a git repo)
         assert!(result.is_ok());
@@ -272,11 +268,14 @@ mod tests {
     #[test]
     fn test_enriched_commit_structure() {
         let mut changes = HashMap::new();
-        changes.insert("main.rs".to_string(), FileChange {
-            file: "main.rs".to_string(),
-            additions: 10,
-            deletions: 5,
-        });
+        changes.insert(
+            "main.rs".to_string(),
+            FileChange {
+                file: "main.rs".to_string(),
+                additions: 10,
+                deletions: 5,
+            },
+        );
 
         let commit = EnrichedCommit {
             hash: "abc123".to_string(),
@@ -293,10 +292,7 @@ mod tests {
 
     #[test]
     fn test_parse_git_history_returns_enriched_commits() {
-        let commits = parse_git_history(
-            std::path::Path::new("."),
-            "all"
-        ).unwrap();
+        let commits = parse_git_history(std::path::Path::new("."), "all").unwrap();
 
         // Should return some commits from current repo
         // (may be empty if not in a git repo, which is OK)

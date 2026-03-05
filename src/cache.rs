@@ -2,8 +2,8 @@
 //!
 //! Stores and retrieves cached metrics to speed up subsequent runs.
 
-use std::path::Path;
 use std::fs;
+use std::path::Path;
 
 const CACHE_FILENAME: &str = ".warden-cache.json";
 const CACHE_MAX_AGE_SECS: u64 = 3600; // 1 hour
@@ -25,7 +25,10 @@ pub fn load_cache(repo_path: &Path) -> anyhow::Result<Option<crate::models::Anal
     Ok(Some(analysis))
 }
 
-pub fn save_cache(repo_path: &Path, analysis: &crate::models::AnalysisResult) -> anyhow::Result<()> {
+pub fn save_cache(
+    repo_path: &Path,
+    analysis: &crate::models::AnalysisResult,
+) -> anyhow::Result<()> {
     let cache_path = repo_path.join(CACHE_FILENAME);
     let json = serde_json::to_string_pretty(analysis)?;
     fs::write(&cache_path, json)?;

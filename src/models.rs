@@ -13,7 +13,13 @@ pub struct LOCMetric {
 
 impl fmt::Display for LOCMetric {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}: {} LOC on {}", self.file, self.lines, self.timestamp.format("%Y-%m-%d"))
+        write!(
+            f,
+            "{}: {} LOC on {}",
+            self.file,
+            self.lines,
+            self.timestamp.format("%Y-%m-%d")
+        )
     }
 }
 
@@ -27,7 +33,13 @@ pub struct ChurnMetric {
 
 impl fmt::Display for ChurnMetric {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}: {:.1}% churn on {}", self.file, self.churn_percentage, self.timestamp.format("%Y-%m-%d"))
+        write!(
+            f,
+            "{}: {:.1}% churn on {}",
+            self.file,
+            self.churn_percentage,
+            self.timestamp.format("%Y-%m-%d")
+        )
     }
 }
 
@@ -42,7 +54,11 @@ pub struct AuthorFrequency {
 
 impl fmt::Display for AuthorFrequency {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} modified {} ({} commits, {} lines)", self.author, self.file, self.commits, self.lines_changed)
+        write!(
+            f,
+            "{} modified {} ({} commits, {} lines)",
+            self.author, self.file, self.commits, self.lines_changed
+        )
     }
 }
 
@@ -56,7 +72,13 @@ pub struct ComplexityMetric {
 
 impl fmt::Display for ComplexityMetric {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}: complexity {} on {}", self.file, self.estimated_complexity as u32, self.timestamp.format("%Y-%m-%d"))
+        write!(
+            f,
+            "{}: complexity {} on {}",
+            self.file,
+            self.estimated_complexity as u32,
+            self.timestamp.format("%Y-%m-%d")
+        )
     }
 }
 
@@ -80,7 +102,11 @@ impl FileMetrics {
     }
 
     pub fn total_authors(&self) -> usize {
-        self.authors.iter().map(|a| &a.author).collect::<std::collections::HashSet<_>>().len()
+        self.authors
+            .iter()
+            .map(|a| &a.author)
+            .collect::<std::collections::HashSet<_>>()
+            .len()
     }
 }
 
@@ -96,7 +122,13 @@ pub struct Prediction {
 
 impl fmt::Display for Prediction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "[{:?}] {} (confidence: {:.0}%)", self.severity, self.file, self.confidence * 100.0)
+        write!(
+            f,
+            "[{:?}] {} (confidence: {:.0}%)",
+            self.severity,
+            self.file,
+            self.confidence * 100.0
+        )
     }
 }
 
@@ -118,11 +150,15 @@ pub enum Trend {
 
 impl fmt::Display for Trend {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", match self {
-            Trend::Improving => "✅ Improving",
-            Trend::Stable => "→ Stable",
-            Trend::Degrading => "⚠️ Degrading",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                Trend::Improving => "✅ Improving",
+                Trend::Stable => "→ Stable",
+                Trend::Degrading => "⚠️ Degrading",
+            }
+        )
     }
 }
 
@@ -196,8 +232,11 @@ pub struct RiskScore {
 
 impl fmt::Display for RiskScore {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} - Risk: {:.1}/10 | {}",
-            self.file, self.risk_value, self.risk_level)
+        write!(
+            f,
+            "{} - Risk: {:.1}/10 | {}",
+            self.file, self.risk_value, self.risk_level
+        )
     }
 }
 
@@ -235,9 +274,15 @@ pub struct ChurnPrediction {
 
 impl fmt::Display for ChurnPrediction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} - Current: {:.1}% | 7d: {:.1}% | 14d: {:.1}% | {}",
-            self.file, self.current_churn, self.predicted_churn_7days,
-            self.predicted_churn_14days, self.warning_level)
+        write!(
+            f,
+            "{} - Current: {:.1}% | 7d: {:.1}% | 14d: {:.1}% | {}",
+            self.file,
+            self.current_churn,
+            self.predicted_churn_7days,
+            self.predicted_churn_14days,
+            self.warning_level
+        )
     }
 }
 
@@ -317,7 +362,10 @@ mod tests {
         // Verify critical state tracking
         assert!(critical_prediction.days_to_critical.is_some());
         assert_eq!(critical_prediction.days_to_critical.unwrap(), 10);
-        assert_eq!(critical_prediction.warning_level, PredictionWarning::Critical);
+        assert_eq!(
+            critical_prediction.warning_level,
+            PredictionWarning::Critical
+        );
     }
 
     #[test]
