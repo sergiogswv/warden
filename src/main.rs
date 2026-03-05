@@ -5,7 +5,7 @@ use warden::{git_parser, ui, cache, models, metrics, analytics, risk_scorer};
 #[derive(Parser)]
 #[command(name = "Warden")]
 #[command(about = "Historical code quality analysis and predictive architecture insights")]
-#[command(version = "0.2.0")]
+#[command(version = "0.3.0")]
 #[command(author = "Sergio Guadarrama")]
 struct Args {
     /// Path to Git repository (defaults to current directory)
@@ -107,7 +107,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     println!("╔════════════════════════════════════╗");
-    println!("║   Warden v0.2.0                    ║");
+    println!("║   Warden v0.3.0                    ║");
     println!("║   Code Quality Historical Analysis ║");
     println!("╚════════════════════════════════════╝");
     println!();

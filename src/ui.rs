@@ -7,7 +7,7 @@ use crate::models::AnalysisResult;
 pub fn show_main_menu(analysis: &AnalysisResult) -> anyhow::Result<()> {
     println!();
     println!("╔════════════════════════════════════╗");
-    println!("║   Warden v0.2.0                    ║");
+    println!("║   Warden v0.3.0                    ║");
     println!("║   Code Quality Historical Analysis ║");
     println!("╚════════════════════════════════════╝");
     println!();
@@ -28,7 +28,7 @@ pub fn show_main_menu(analysis: &AnalysisResult) -> anyhow::Result<()> {
 }
 
 pub fn render_debt_trends(_analysis: &AnalysisResult) -> anyhow::Result<()> {
-    println!("📈 TECHNICAL DEBT TRENDS (ASCII charts coming in v0.2.0)");
+    println!("📈 TECHNICAL DEBT TRENDS (ASCII charts coming in v0.4.0)");
     Ok(())
 }
 
@@ -116,7 +116,7 @@ pub fn render_hotspots_with_risk(risk_scores: &[crate::models::RiskScore], top_n
 }
 
 pub fn render_author_stats(_analysis: &AnalysisResult) -> anyhow::Result<()> {
-    println!("👤 AUTHOR STATISTICS (coming in v0.2.0)");
+    println!("👤 AUTHOR STATISTICS (coming in v0.4.0)");
     Ok(())
 }
 
@@ -128,7 +128,7 @@ pub fn export_json(analysis: &AnalysisResult, output_path: &str) -> anyhow::Resu
 }
 
 pub fn export_markdown(_analysis: &AnalysisResult, _output_path: &str) -> anyhow::Result<()> {
-    println!("Markdown export coming in v0.2.0");
+    println!("Markdown export coming in v0.4.0");
     Ok(())
 }
 
