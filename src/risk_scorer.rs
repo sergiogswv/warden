@@ -46,7 +46,16 @@ pub fn calculate_risk_scores(
 
         // Apply size dampening for small files to reduce false positives
         // Small files with high churn shouldn't be marked as Critical
-        let risk_value = apply_size_dampening(raw_risk, loc);
+        let mut risk_value = apply_size_dampening(raw_risk, loc);
+
+        // Calculate days since last modification for decay factor
+        let last_modified_days_ago = calculate_days_since_modified(
+            &metrics.churn_history
+        );
+
+        // Apply decay factor for old, stable files
+        // Files not modified in 30+ days are less risky
+        risk_value = apply_stability_decay(risk_value, last_modified_days_ago);
 
         let risk_level = classify_risk_level(risk_value);
         let trend = detect_churn_trend(&metrics.churn_history);
@@ -58,9 +67,6 @@ pub fn calculate_risk_scores(
             loc,
             authors,
             &trend,
-        );
-        let last_modified_days_ago = calculate_days_since_modified(
-            &metrics.churn_history
         );
 
         risk_scores.push(RiskScore {
@@ -102,6 +108,23 @@ fn apply_size_dampening(risk: f64, loc: usize) -> f64 {
     } else {
         risk.min(10.0)
     }
+}
+
+/// Apply stability decay for files not recently modified
+/// Files that haven't changed in weeks are less risky
+/// Formula: decay_factor = 1 / (1 + days/30)
+/// This gradually reduces risk for stable files
+fn apply_stability_decay(risk: f64, days_since_modified: usize) -> f64 {
+    if days_since_modified == 0 {
+        return risk;
+    }
+
+    // Decay factor: 1 / (1 + days/30)
+    // 30 days:  factor = 0.5 (50% reduction)
+    // 60 days:  factor = 0.33 (67% reduction)
+    // 90 days:  factor = 0.25 (75% reduction)
+    let decay_factor = 1.0 / (1.0 + (days_since_modified as f64) / 30.0);
+    (risk * decay_factor).max(0.5) // Never drop below 0.5 (Safe)
 }
 
 pub fn classify_risk_level(risk: f64) -> RiskLevel {
@@ -278,5 +301,39 @@ mod tests {
         let risk_large = apply_size_dampening(10.0, 200);
         // No dampening for large files
         assert_eq!(risk_large, 10.0);
+    }
+
+    #[test]
+    fn test_stability_decay_for_old_files() {
+        // Test that files not recently modified get decay factor
+        // Recent changes (0 days ago)
+        let fresh = apply_stability_decay(6.0, 0);
+        assert_eq!(fresh, 6.0); // No decay
+
+        // 30 days without modification
+        let one_month = apply_stability_decay(6.0, 30);
+        // decay factor = 1 / (1 + 30/30) = 0.5
+        // expected: 6.0 * 0.5 = 3.0
+        assert!(one_month < 3.1);
+        assert!(one_month > 2.9);
+
+        // 60 days without modification
+        let two_months = apply_stability_decay(6.0, 60);
+        // decay factor = 1 / (1 + 60/30) = 0.33
+        // expected: 6.0 * 0.33 = 2.0
+        assert!(two_months < 2.1);
+        assert!(two_months > 1.9);
+
+        // 90 days without modification (like calendar.tsx)
+        let three_months = apply_stability_decay(6.0, 90);
+        // decay factor = 1 / (1 + 90/30) = 0.25
+        // expected: 6.0 * 0.25 = 1.5 (Safe zone!)
+        assert!(three_months < 1.6);
+        assert!(three_months > 1.4);
+
+        // Verify floor at 0.5 (Safe minimum)
+        let very_old = apply_stability_decay(1.0, 365);
+        // Should not go below 0.5
+        assert_eq!(very_old, 0.5);
     }
 }
