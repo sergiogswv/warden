@@ -75,6 +75,54 @@ pub fn render_hotspots(analysis: &AnalysisResult, top_n: usize) -> anyhow::Resul
     Ok(())
 }
 
+/// Get contextual description of churn based on trend, recency, and frequency
+/// Considers not just the churn percentage, but the actual stability of the file
+fn get_contextual_churn_description(
+    churn_percentage: f64,
+    trend: crate::models::ChurnTrend,
+    recent_commits: usize,
+    last_modified_days_ago: usize,
+) -> String {
+    use crate::models::ChurnTrend;
+
+    // Priority 1: Check trend (most important indicator of actual instability)
+    match trend {
+        ChurnTrend::Degrading => {
+            return "Degrading (churn increasing)".to_string();
+        }
+        ChurnTrend::Improving => {
+            return "Improving (was unstable, now stable)".to_string();
+        }
+        ChurnTrend::Stable => {
+            // Continue to other checks for stable trend
+        }
+    }
+
+    // Priority 2: Check recency and frequency
+    // A file that hasn't changed in weeks is stable, even with high historical churn
+    if last_modified_days_ago > 14 {
+        return format!("Stable (recently refactored)");
+    }
+
+    // If only 1-2 recent commits, it's an isolated change (bugfix/refactor)
+    if recent_commits <= 2 && last_modified_days_ago <= 7 {
+        return format!("Stable (single change)");
+    }
+
+    // If 3+ recent commits, it's actively being changed (potentially unstable)
+    if recent_commits >= 3 && last_modified_days_ago <= 7 {
+        return format!("Unstable (multiple recent changes)");
+    }
+
+    // Fallback: describe based on churn percentage alone
+    match churn_percentage {
+        c if c > 80.0 => "high churn".to_string(),
+        c if c > 50.0 => "unstable".to_string(),
+        c if c > 30.0 => "moderate".to_string(),
+        _ => "stable".to_string(),
+    }
+}
+
 pub fn render_hotspots_with_risk(risk_scores: &[crate::models::RiskScore], top_n: usize) {
     println!("\n🏆 TOP {} HOTSPOTS (by Risk Score):", top_n);
     println!("{}\n", "=".repeat(60));
@@ -83,12 +131,12 @@ pub fn render_hotspots_with_risk(risk_scores: &[crate::models::RiskScore], top_n
         println!("{}. {}", i + 1, score.file);
         println!("   Risk Score: {:.1}/10 {}", score.risk_value, score.risk_level);
 
-        let churn_desc = match score.churn_percentage {
-            c if c > 80.0 => "highly unstable",
-            c if c > 50.0 => "unstable",
-            c if c > 30.0 => "moderate",
-            _ => "stable",
-        };
+        let churn_desc = get_contextual_churn_description(
+            score.churn_percentage,
+            score.trend,
+            score.recent_commits,
+            score.last_modified_days_ago,
+        );
         println!("   ├─ Churn: {:.1}% ({})", score.churn_percentage, churn_desc);
 
         let loc_desc = match score.loc {
