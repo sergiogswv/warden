@@ -1,6 +1,6 @@
 use clap::{CommandFactory, Parser, Subcommand};
 use std::path::PathBuf;
-use warden::{git_parser, metrics, analytics, prediction, ui, cache, models};
+use warden::{git_parser, ui, cache, models};
 
 #[derive(Parser)]
 #[command(name = "Warden")]

@@ -3,7 +3,6 @@
 //! Extracts commit history, file changes, and metadata from Git repositories.
 
 use std::path::Path;
-use chrono::Duration;
 
 #[derive(Debug, Clone)]
 pub struct Commit {
