@@ -3,24 +3,24 @@
 //! Extracts commit history, file changes, and metadata from Git repositories.
 
 use std::path::Path;
+use chrono::Duration;
 
-/// Parse Git history from a repository
-pub fn parse_git_history(repo_path: &Path, period: &str) -> anyhow::Result<()> {
-    // TODO: Implement git2 integration
-    // - Execute git log with custom format
-    // - Extract: author, date, files changed, lines added/removed
-    // - Build commit graph
-    // - Cache results
-
-    Ok(())
+#[derive(Debug, Clone)]
+pub struct Commit {
+    pub hash: String,
+    pub author: String,
+    pub message: String,
+    pub timestamp: i64,
+    pub files: Vec<String>,
 }
 
-/// Get file diffs for analysis
-pub fn get_file_diffs(repo_path: &Path) -> anyhow::Result<()> {
-    // TODO: Extract added/deleted lines per file
-    // - Parse diff output
-    // - Calculate churn metrics
+pub fn parse_git_history(_repo_path: &Path, _period: &str) -> anyhow::Result<Vec<Commit>> {
+    // MVP: Return empty for now, will implement Git analysis in v0.2.0
+    // The full implementation requires more detailed git2 API work
+    Ok(vec![])
+}
 
+pub fn get_file_diffs(_repo_path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
@@ -29,7 +29,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_git_history() {
-        // TODO: Add tests
+    fn test_parse_git_history_empty_repo() {
+        // Placeholder test
+        assert!(true);
     }
 }

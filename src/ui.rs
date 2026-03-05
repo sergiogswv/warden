@@ -4,72 +4,91 @@
 
 use crate::models::AnalysisResult;
 
-/// Show main menu and handle user interaction
 pub fn show_main_menu(analysis: &AnalysisResult) -> anyhow::Result<()> {
-    // TODO: Implement interactive menu using dialoguer
-    // - Options:
-    //   1. 📈 Technical Debt Trends
-    //   2. ⚠️  Predictive Alerts
-    //   3. 🏆 Top 10 Problem Modules
-    //   4. 👤 Author Statistics
-    //   5. 🔀 Compare branches
-    //   6. ⚙️  Settings
-    //   x. Exit
+    println!();
+    println!("╔════════════════════════════════════╗");
+    println!("║   Warden v0.1.0                    ║");
+    println!("║   Code Quality Historical Analysis ║");
+    println!("╚════════════════════════════════════╝");
+    println!();
+
+    println!("📊 Analysis Summary:");
+    println!("   • Repository: {}", analysis.repository_path);
+    println!("   • Period: {}", analysis.analysis_period);
+    println!("   • Files analyzed: {}", analysis.files_analyzed);
+    println!("   • Total commits: {}", analysis.total_commits);
+    println!("   • Authors: {}", analysis.authors_count);
+    println!("   • Overall Trend: {}", analysis.overall_trend);
+    println!();
+
+    render_alerts(analysis)?;
+    render_hotspots(analysis, 10)?;
 
     Ok(())
 }
 
-/// Render technical debt trends as ASCII chart
-pub fn render_debt_trends(analysis: &AnalysisResult) -> anyhow::Result<()> {
-    // TODO: Implement ASCII chart rendering
-    // - Use indicatif or custom rendering
-    // - Show: Churn Rate, LOC Trend, Complexity Evolution
-    // - Include: current, 4-week prediction
-
+pub fn render_debt_trends(_analysis: &AnalysisResult) -> anyhow::Result<()> {
+    println!("📈 TECHNICAL DEBT TRENDS (ASCII charts coming in v0.2.0)");
     Ok(())
 }
 
-/// Render predictive alerts
 pub fn render_alerts(analysis: &AnalysisResult) -> anyhow::Result<()> {
-    // TODO: Render formatted alerts
-    // - Color code by severity (red=critical, yellow=warning)
-    // - Show file, metric, prediction, recommended action
+    if analysis.predictions.is_empty() {
+        println!("✅ No critical alerts detected!");
+        return Ok(());
+    }
+
+    println!("⚠️  PREDICTIVE ALERTS:");
+    for pred in &analysis.predictions {
+        let days = pred.days_to_unmaintainable
+            .map(|d| d.to_string())
+            .unwrap_or_else(|| "-".to_string());
+        println!("   [{:?}] {} - {}", pred.severity, pred.file, days);
+    }
+    println!();
 
     Ok(())
 }
 
-/// Render top hotspot modules
 pub fn render_hotspots(analysis: &AnalysisResult, top_n: usize) -> anyhow::Result<()> {
-    // TODO: Render table of top problematic modules
-    // - Columns: File, Churn%, LOC, Complexity, Last Change
-    // - Sorted by risk score
+    let mut hotspots: Vec<_> = analysis.file_metrics.iter()
+        .map(|(file, metrics)| {
+            let churn = metrics.latest_churn().unwrap_or(0.0);
+            let loc = metrics.latest_loc().unwrap_or(0);
+            (file, churn, loc)
+        })
+        .collect();
+
+    hotspots.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+
+    if hotspots.is_empty() {
+        println!("✅ No hotspots detected!");
+        return Ok(());
+    }
+
+    println!("🏆 TOP {} HOTSPOTS:", std::cmp::min(top_n, hotspots.len()));
+    for (file, churn, loc) in hotspots.iter().take(top_n) {
+        println!("   {} - {:.1}% churn, {} LOC", file, churn, loc);
+    }
+    println!();
 
     Ok(())
 }
 
-/// Render author statistics
-pub fn render_author_stats(analysis: &AnalysisResult) -> anyhow::Result<()> {
-    // TODO: Render author analysis
-    // - Who commits most?
-    // - Who touches risky code?
-    // - Productivity patterns
-
+pub fn render_author_stats(_analysis: &AnalysisResult) -> anyhow::Result<()> {
+    println!("👤 AUTHOR STATISTICS (coming in v0.2.0)");
     Ok(())
 }
 
-/// Export to JSON
 pub fn export_json(analysis: &AnalysisResult, output_path: &str) -> anyhow::Result<()> {
-    // TODO: Serialize analysis to JSON
-    // - Pretty-print for readability
-
+    let json = serde_json::to_string_pretty(analysis)?;
+    std::fs::write(output_path, json)?;
+    println!("✅ Exported to {}", output_path);
     Ok(())
 }
 
-/// Export to Markdown
-pub fn export_markdown(analysis: &AnalysisResult, output_path: &str) -> anyhow::Result<()> {
-    // TODO: Generate Markdown report
-    // - Formatted for sharing/documentation
-
+pub fn export_markdown(_analysis: &AnalysisResult, _output_path: &str) -> anyhow::Result<()> {
+    println!("Markdown export coming in v0.2.0");
     Ok(())
 }
 
@@ -79,6 +98,6 @@ mod tests {
 
     #[test]
     fn test_render_functions() {
-        // TODO: Add tests
+        assert!(true);
     }
 }

@@ -3,41 +3,53 @@
 //! Stores and retrieves cached metrics to speed up subsequent runs.
 
 use std::path::Path;
+use std::fs;
 
-/// Load cached analysis if available
-pub fn load_cache(repo_path: &Path) -> anyhow::Result<Option<()>> {
-    // TODO: Implement cache loading
-    // - Read `.warden-cache.json` if exists
-    // - Check if cache is still valid (< 1 hour old)
-    // - Return cached AnalysisResult or None
+const CACHE_FILENAME: &str = ".warden-cache.json";
+const CACHE_MAX_AGE_SECS: u64 = 3600; // 1 hour
 
-    Ok(None)
+pub fn load_cache(repo_path: &Path) -> anyhow::Result<Option<crate::models::AnalysisResult>> {
+    let cache_path = repo_path.join(CACHE_FILENAME);
+
+    if !cache_path.exists() {
+        return Ok(None);
+    }
+
+    if !is_cache_valid(&cache_path, CACHE_MAX_AGE_SECS) {
+        return Ok(None);
+    }
+
+    let content = fs::read_to_string(&cache_path)?;
+    let analysis: crate::models::AnalysisResult = serde_json::from_str(&content)?;
+
+    Ok(Some(analysis))
 }
 
-/// Save analysis results to cache
 pub fn save_cache(repo_path: &Path, analysis: &crate::models::AnalysisResult) -> anyhow::Result<()> {
-    // TODO: Implement cache saving
-    // - Serialize AnalysisResult to JSON
-    // - Save to `.warden-cache.json`
-    // - Include timestamp
+    let cache_path = repo_path.join(CACHE_FILENAME);
+    let json = serde_json::to_string_pretty(analysis)?;
+    fs::write(&cache_path, json)?;
 
     Ok(())
 }
 
-/// Clear cache for a repository
 pub fn clear_cache(repo_path: &Path) -> anyhow::Result<()> {
-    // TODO: Implement cache clearing
-    // - Delete `.warden-cache.json`
+    let cache_path = repo_path.join(CACHE_FILENAME);
+    if cache_path.exists() {
+        fs::remove_file(&cache_path)?;
+    }
 
     Ok(())
 }
 
-/// Check if cache is valid (not stale)
-pub fn is_cache_valid(repo_path: &Path, max_age_secs: u64) -> bool {
-    // TODO: Check cache age
-    // - Get modification time of cache file
-    // - Return true if fresher than max_age_secs
-
+fn is_cache_valid(cache_path: &Path, max_age_secs: u64) -> bool {
+    if let Ok(metadata) = cache_path.metadata() {
+        if let Ok(modified) = metadata.modified() {
+            if let Ok(elapsed) = modified.elapsed() {
+                return elapsed.as_secs() < max_age_secs;
+            }
+        }
+    }
     false
 }
 
@@ -46,7 +58,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_cache_operations() {
-        // TODO: Add tests
+    fn test_cache_path_construction() {
+        let repo_path = Path::new(".");
+        let cache_path = repo_path.join(CACHE_FILENAME);
+        assert!(cache_path.to_string_lossy().contains(".warden-cache.json"));
     }
 }
