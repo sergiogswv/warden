@@ -74,6 +74,40 @@ powershell -Command "& { $(irm https://raw.githubusercontent.com/YOUR_GITHUB_REP
 5. Restart PowerShell/CMD
 6. Verify: `warden --version`
 
+## Version Management
+
+Warden uses a single version source (`.version` file) for all components.
+
+### Checking for Updates (Development)
+
+```bash
+./installers/check-updates.sh
+```
+
+This compares your installed version with the compiled version.
+
+### Updating (Development)
+
+```bash
+cargo build --release
+./installers/install-linux.sh
+# → Prompts if new version is available
+```
+
+### Releasing New Version
+
+```bash
+# 1. Update version
+echo "0.2.0" > .version
+
+# 2. Build and test
+cargo build --release
+./target/release/warden --version
+
+# 3. Publish
+./installers/release.sh 0.2.0
+```
+
 ## Building Release Binaries
 
 ### Prerequisites

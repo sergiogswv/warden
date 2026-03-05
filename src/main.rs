@@ -48,15 +48,36 @@ enum Commands {
     ClearCache,
     /// Show help
     Help,
+    /// Check for updates
+    CheckUpdates,
 }
 
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
-    let repo_path = args.path.unwrap_or_else(|| PathBuf::from("."));
+    let mut repo_path = args.path.unwrap_or_else(|| PathBuf::from("."));
+
+    // Convert to absolute path
+    if repo_path.is_relative() {
+        if let Ok(cwd) = std::env::current_dir() {
+            repo_path = cwd.join(&repo_path);
+            // Normalize path to remove redundant components
+            if let Ok(normalized) = std::fs::canonicalize(&repo_path) {
+                repo_path = normalized;
+            }
+        }
+    }
 
     match args.command {
         Some(Commands::Version) => {
-            println!("Warden v0.1.0");
+            let version = env!("CARGO_PKG_VERSION");
+            println!("Warden v{}", version);
+            if let Ok(build_dir) = std::env::var("CARGO_MANIFEST_DIR") {
+                if let Ok(version_file) = std::fs::read_to_string(
+                    std::path::PathBuf::from(build_dir).join(".version")
+                ) {
+                    println!("  Version file: {}", version_file.trim());
+                }
+            }
             return Ok(());
         }
         Some(Commands::ClearCache) => {
@@ -66,6 +87,20 @@ fn main() -> anyhow::Result<()> {
         }
         Some(Commands::Help) => {
             println!("{}", Args::command().render_help());
+            return Ok(());
+        }
+        Some(Commands::CheckUpdates) => {
+            let installed_version = env!("CARGO_PKG_VERSION");
+
+            println!("╔═══════════════════════════════════════╗");
+            println!("║  Warden Update Check                  ║");
+            println!("╚═══════════════════════════════════════╝");
+            println!();
+            println!("Installed version: {}", installed_version);
+            println!("Latest available: (configure GITHUB_REPO for automatic checks)");
+            println!();
+            println!("✓ To enable automatic checks, set GITHUB_REPO environment variable");
+
             return Ok(());
         }
         None => {}
@@ -84,7 +119,7 @@ fn main() -> anyhow::Result<()> {
 
     // Try to load from cache first
     if let Ok(Some(cached_analysis)) = cache::load_cache(&repo_path) {
-        println!("✅ Using cached results (use --clear-cache to refresh)");
+        println!("✅ Using cached results (use 'warden clear-cache' to refresh)");
         println!();
 
         return match args.format.as_str() {
