@@ -176,6 +176,69 @@ pub fn render_hotspots_with_risk(risk_scores: &[crate::models::RiskScore], top_n
     }
 }
 
+pub fn render_hotspots_with_risk_and_predictions(risk_scores: &[crate::models::RiskScore], top_n: usize) {
+    println!("\n🏆 TOP {} HOTSPOTS (by Risk Score with Predictions):", top_n);
+    println!("{}\n", "=".repeat(80));
+
+    for (i, score) in risk_scores.iter().take(top_n).enumerate() {
+        println!("{}. {}", i + 1, score.file);
+        println!(
+            "   Risk Score: {:.1}/10 {}",
+            score.risk_value, score.risk_level
+        );
+
+        let churn_desc = get_contextual_churn_description(
+            score.churn_percentage,
+            score.trend,
+            score.recent_commits,
+            score.last_modified_days_ago,
+        );
+        println!(
+            "   ├─ Churn: {:.1}% ({})",
+            score.churn_percentage, churn_desc
+        );
+
+        let loc_desc = match score.loc {
+            l if l > 500 => "large file",
+            l if l > 200 => "medium file",
+            l if l > 50 => "small file",
+            _ => "tiny file",
+        };
+        println!("   ├─ LOC: {} ({})", score.loc, loc_desc);
+
+        let author_desc = match score.author_count {
+            a if a > 4 => "fragmented",
+            a if a > 2 => "shared",
+            _ => "owned",
+        };
+        println!("   ├─ Authors: {} ({})", score.author_count, author_desc);
+
+        println!("   ├─ Complexity: {:.1}/10", score.complexity);
+        println!("   ├─ Trend: {}", score.trend);
+        println!("   ├─ Recent commits: {}", score.recent_commits);
+        println!(
+            "   ├─ Last modified: {} days ago",
+            score.last_modified_days_ago
+        );
+
+        if let Some(prediction) = &score.prediction {
+            println!("   ├─ Recommendation: {}", score.recommendation);
+            println!("   └─ Predictive Alert:");
+            println!("      ├─ Current Churn: {:.1}%", prediction.current_churn);
+            println!("      ├─ 7-Day Forecast: {:.1}%", prediction.predicted_churn_7days);
+            println!("      ├─ 14-Day Forecast: {:.1}%", prediction.predicted_churn_14days);
+            if let Some(days_to_critical) = prediction.days_to_critical {
+                println!("      ├─ Days to Critical: {}", days_to_critical);
+            }
+            println!("      ├─ Confidence: {:.0}%", prediction.prediction_confidence * 100.0);
+            println!("      └─ Alert Level: {}", prediction.warning_level);
+        } else {
+            println!("   └─ Recommendation: {}", score.recommendation);
+        }
+        println!();
+    }
+}
+
 pub fn render_author_stats(_analysis: &AnalysisResult) -> anyhow::Result<()> {
     println!("👤 AUTHOR STATISTICS (coming in v0.4.0)");
     Ok(())
@@ -196,9 +259,232 @@ pub fn export_markdown(_analysis: &AnalysisResult, _output_path: &str) -> anyhow
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::{ChurnPrediction, PredictionWarning, RiskLevel, ChurnTrend};
 
     #[test]
     fn test_render_functions() {
         assert!(true);
+    }
+
+    #[test]
+    fn test_prediction_warning_display_with_emojis() {
+        assert_eq!(format!("{}", PredictionWarning::None), "None");
+        assert_eq!(format!("{}", PredictionWarning::Watch), "⚠️ Watch");
+        assert_eq!(format!("{}", PredictionWarning::Degrade), "⚠️ Degrade");
+        assert_eq!(format!("{}", PredictionWarning::Critical), "🔴 Critical");
+    }
+
+    #[test]
+    fn test_render_hotspots_with_risk_and_predictions_no_panic() {
+        let risk_scores = vec![
+            crate::models::RiskScore {
+                file: "src/analytics.rs".to_string(),
+                risk_value: 6.5,
+                risk_level: RiskLevel::Alert,
+                churn_percentage: 75.2,
+                loc: 285,
+                author_count: 3,
+                recent_commits: 4,
+                complexity: 7.2,
+                trend: ChurnTrend::Degrading,
+                recommendation: "Refactor and document".to_string(),
+                last_modified_days_ago: 2,
+                prediction: Some(ChurnPrediction {
+                    file: "src/analytics.rs".to_string(),
+                    current_churn: 75.2,
+                    predicted_churn_7days: 78.5,
+                    predicted_churn_14days: 82.1,
+                    days_to_critical: Some(8),
+                    prediction_confidence: 0.85,
+                    warning_level: PredictionWarning::Critical,
+                }),
+            },
+        ];
+
+        render_hotspots_with_risk_and_predictions(&risk_scores, 5);
+    }
+
+    #[test]
+    fn test_render_hotspots_with_predictions_output_contains_expected_fields() {
+        let risk_scores = vec![
+            crate::models::RiskScore {
+                file: "src/test.rs".to_string(),
+                risk_value: 5.5,
+                risk_level: RiskLevel::Monitor,
+                churn_percentage: 45.0,
+                loc: 150,
+                author_count: 2,
+                recent_commits: 3,
+                complexity: 5.0,
+                trend: ChurnTrend::Stable,
+                recommendation: "Monitor closely".to_string(),
+                last_modified_days_ago: 5,
+                prediction: Some(ChurnPrediction {
+                    file: "src/test.rs".to_string(),
+                    current_churn: 45.0,
+                    predicted_churn_7days: 50.0,
+                    predicted_churn_14days: 55.0,
+                    days_to_critical: Some(20),
+                    prediction_confidence: 0.80,
+                    warning_level: PredictionWarning::Watch,
+                }),
+            },
+        ];
+
+        render_hotspots_with_risk_and_predictions(&risk_scores, 10);
+    }
+
+    #[test]
+    fn test_render_hotspots_with_predictions_handles_none_prediction() {
+        let risk_scores = vec![
+            crate::models::RiskScore {
+                file: "src/stable.rs".to_string(),
+                risk_value: 2.0,
+                risk_level: RiskLevel::Safe,
+                churn_percentage: 5.0,
+                loc: 100,
+                author_count: 1,
+                recent_commits: 1,
+                complexity: 2.0,
+                trend: ChurnTrend::Stable,
+                recommendation: "No action needed".to_string(),
+                last_modified_days_ago: 30,
+                prediction: None,
+            },
+        ];
+
+        render_hotspots_with_risk_and_predictions(&risk_scores, 10);
+    }
+
+    #[test]
+    fn test_render_hotspots_with_predictions_top_n_filtering() {
+        let risk_scores = vec![
+            crate::models::RiskScore {
+                file: "src/file1.rs".to_string(),
+                risk_value: 8.0,
+                risk_level: RiskLevel::Critical,
+                churn_percentage: 85.0,
+                loc: 500,
+                author_count: 5,
+                recent_commits: 10,
+                complexity: 8.5,
+                trend: ChurnTrend::Degrading,
+                recommendation: "Urgent refactoring".to_string(),
+                last_modified_days_ago: 1,
+                prediction: Some(ChurnPrediction {
+                    file: "src/file1.rs".to_string(),
+                    current_churn: 85.0,
+                    predicted_churn_7days: 90.0,
+                    predicted_churn_14days: 95.0,
+                    days_to_critical: Some(3),
+                    prediction_confidence: 0.95,
+                    warning_level: PredictionWarning::Critical,
+                }),
+            },
+            crate::models::RiskScore {
+                file: "src/file2.rs".to_string(),
+                risk_value: 5.0,
+                risk_level: RiskLevel::Alert,
+                churn_percentage: 60.0,
+                loc: 300,
+                author_count: 3,
+                recent_commits: 5,
+                complexity: 6.0,
+                trend: ChurnTrend::Degrading,
+                recommendation: "Review and refactor".to_string(),
+                last_modified_days_ago: 2,
+                prediction: Some(ChurnPrediction {
+                    file: "src/file2.rs".to_string(),
+                    current_churn: 60.0,
+                    predicted_churn_7days: 65.0,
+                    predicted_churn_14days: 70.0,
+                    days_to_critical: Some(10),
+                    prediction_confidence: 0.85,
+                    warning_level: PredictionWarning::Watch,
+                }),
+            },
+            crate::models::RiskScore {
+                file: "src/file3.rs".to_string(),
+                risk_value: 3.0,
+                risk_level: RiskLevel::Monitor,
+                churn_percentage: 35.0,
+                loc: 200,
+                author_count: 2,
+                recent_commits: 2,
+                complexity: 4.0,
+                trend: ChurnTrend::Stable,
+                recommendation: "Monitor".to_string(),
+                last_modified_days_ago: 7,
+                prediction: None,
+            },
+        ];
+
+        render_hotspots_with_risk_and_predictions(&risk_scores, 2);
+    }
+
+    #[test]
+    fn test_render_hotspots_with_predictions_missing_days_to_critical() {
+        let risk_scores = vec![
+            crate::models::RiskScore {
+                file: "src/test.rs".to_string(),
+                risk_value: 4.0,
+                risk_level: RiskLevel::Monitor,
+                churn_percentage: 40.0,
+                loc: 150,
+                author_count: 2,
+                recent_commits: 3,
+                complexity: 4.5,
+                trend: ChurnTrend::Stable,
+                recommendation: "Monitor".to_string(),
+                last_modified_days_ago: 5,
+                prediction: Some(ChurnPrediction {
+                    file: "src/test.rs".to_string(),
+                    current_churn: 40.0,
+                    predicted_churn_7days: 42.0,
+                    predicted_churn_14days: 44.0,
+                    days_to_critical: None,
+                    prediction_confidence: 0.70,
+                    warning_level: PredictionWarning::None,
+                }),
+            },
+        ];
+
+        render_hotspots_with_risk_and_predictions(&risk_scores, 10);
+    }
+
+    #[test]
+    fn test_render_hotspots_with_predictions_empty_list() {
+        let risk_scores: Vec<crate::models::RiskScore> = vec![];
+        render_hotspots_with_risk_and_predictions(&risk_scores, 10);
+    }
+
+    #[test]
+    fn test_render_hotspots_with_predictions_prediction_confidence_formatting() {
+        let risk_scores = vec![
+            crate::models::RiskScore {
+                file: "src/test.rs".to_string(),
+                risk_value: 6.0,
+                risk_level: RiskLevel::Alert,
+                churn_percentage: 70.0,
+                loc: 250,
+                author_count: 3,
+                recent_commits: 5,
+                complexity: 6.5,
+                trend: ChurnTrend::Degrading,
+                recommendation: "Refactor".to_string(),
+                last_modified_days_ago: 3,
+                prediction: Some(ChurnPrediction {
+                    file: "src/test.rs".to_string(),
+                    current_churn: 70.0,
+                    predicted_churn_7days: 75.0,
+                    predicted_churn_14days: 80.0,
+                    days_to_critical: Some(7),
+                    prediction_confidence: 0.925,
+                    warning_level: PredictionWarning::Critical,
+                }),
+            },
+        ];
+
+        render_hotspots_with_risk_and_predictions(&risk_scores, 10);
     }
 }

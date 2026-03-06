@@ -254,9 +254,9 @@ impl fmt::Display for PredictionWarning {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             PredictionWarning::None => write!(f, "None"),
-            PredictionWarning::Watch => write!(f, "Watch"),
-            PredictionWarning::Degrade => write!(f, "Degrade"),
-            PredictionWarning::Critical => write!(f, "Critical"),
+            PredictionWarning::Watch => write!(f, "⚠️ Watch"),
+            PredictionWarning::Degrade => write!(f, "⚠️ Degrade"),
+            PredictionWarning::Critical => write!(f, "🔴 Critical"),
         }
     }
 }
@@ -373,8 +373,8 @@ mod tests {
     #[test]
     fn test_prediction_warning_levels() {
         assert_eq!(format!("{}", PredictionWarning::None), "None");
-        assert_eq!(format!("{}", PredictionWarning::Watch), "Watch");
-        assert_eq!(format!("{}", PredictionWarning::Degrade), "Degrade");
-        assert_eq!(format!("{}", PredictionWarning::Critical), "Critical");
+        assert_eq!(format!("{}", PredictionWarning::Watch), "⚠️ Watch");
+        assert_eq!(format!("{}", PredictionWarning::Degrade), "⚠️ Degrade");
+        assert_eq!(format!("{}", PredictionWarning::Critical), "🔴 Critical");
     }
 }
