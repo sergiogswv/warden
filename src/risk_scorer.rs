@@ -1,6 +1,7 @@
 //! Risk scoring engine for hotspot detection
 
 use crate::models::*;
+use crate::predictor::predict_churn_trajectory;
 use chrono::Utc;
 use std::collections::HashMap;
 
@@ -79,6 +80,17 @@ pub fn calculate_risk_scores(
         let trend = detect_churn_trend(&metrics.churn_history);
         let recommendation = generate_recommendation(risk_value, loc, authors, &trend);
 
+        // Calculate prediction from churn history
+        // Extract churn percentages from churn_history
+        let churn_history_values: Vec<f64> = metrics
+            .churn_history
+            .iter()
+            .map(|m| m.churn_percentage)
+            .collect();
+
+        // Call predict_churn_trajectory, handle errors gracefully
+        let prediction = predict_churn_trajectory(&filename, &churn_history_values).ok();
+
         risk_scores.push(RiskScore {
             file: filename.clone(),
             risk_value,
@@ -91,6 +103,7 @@ pub fn calculate_risk_scores(
             trend,
             recommendation,
             last_modified_days_ago,
+            prediction,
         });
     }
 
@@ -267,15 +280,22 @@ mod tests {
     fn test_risk_scores_sorted_descending() {
         let mut metrics = HashMap::new();
 
-        // Create test metrics
+        // Create test metrics with enough history for prediction
         let m1 = FileMetrics {
             file: "high_risk.rs".to_string(),
             loc_history: vec![],
-            churn_history: vec![ChurnMetric {
-                file: "high_risk.rs".to_string(),
-                timestamp: Utc::now(),
-                churn_percentage: 80.0,
-            }],
+            churn_history: vec![
+                ChurnMetric {
+                    file: "high_risk.rs".to_string(),
+                    timestamp: Utc::now() - chrono::Duration::days(1),
+                    churn_percentage: 60.0,
+                },
+                ChurnMetric {
+                    file: "high_risk.rs".to_string(),
+                    timestamp: Utc::now(),
+                    churn_percentage: 80.0,
+                },
+            ],
             authors: vec![],
             complexity_history: vec![],
         };
@@ -283,11 +303,18 @@ mod tests {
         let m2 = FileMetrics {
             file: "low_risk.rs".to_string(),
             loc_history: vec![],
-            churn_history: vec![ChurnMetric {
-                file: "low_risk.rs".to_string(),
-                timestamp: Utc::now(),
-                churn_percentage: 20.0,
-            }],
+            churn_history: vec![
+                ChurnMetric {
+                    file: "low_risk.rs".to_string(),
+                    timestamp: Utc::now() - chrono::Duration::days(1),
+                    churn_percentage: 15.0,
+                },
+                ChurnMetric {
+                    file: "low_risk.rs".to_string(),
+                    timestamp: Utc::now(),
+                    churn_percentage: 20.0,
+                },
+            ],
             authors: vec![],
             complexity_history: vec![],
         };
@@ -299,6 +326,9 @@ mod tests {
 
         // Verify sorting: first should have higher risk than second
         assert!(scores[0].risk_value >= scores[1].risk_value);
+        // Verify prediction field exists for both
+        assert!(scores[0].prediction.is_some());
+        assert!(scores[1].prediction.is_some());
     }
 
     #[test]
@@ -444,5 +474,337 @@ mod tests {
         let impact_single = ((1_f64).min((21_f64) / 20.0)).max(1.0);
         // min(1, 1.05) = 1.0
         assert_eq!(impact_single, 1.0);
+    }
+
+    // Tests for prediction integration
+
+    #[test]
+    fn test_risk_score_includes_prediction_field() {
+        // Test that RiskScore struct includes prediction data
+        let mut metrics = HashMap::new();
+
+        let m1 = FileMetrics {
+            file: "test.rs".to_string(),
+            loc_history: vec![],
+            churn_history: vec![
+                ChurnMetric {
+                    file: "test.rs".to_string(),
+                    timestamp: Utc::now() - chrono::Duration::days(1),
+                    churn_percentage: 30.0,
+                },
+                ChurnMetric {
+                    file: "test.rs".to_string(),
+                    timestamp: Utc::now(),
+                    churn_percentage: 40.0,
+                },
+            ],
+            authors: vec![],
+            complexity_history: vec![],
+        };
+
+        metrics.insert("test.rs".to_string(), m1);
+
+        let scores = calculate_risk_scores(&metrics, 10).unwrap();
+        assert_eq!(scores.len(), 1);
+
+        // Verify prediction field exists and is populated
+        let score = &scores[0];
+        assert_eq!(score.file, "test.rs");
+        assert!(score.prediction.is_some(), "prediction should be populated");
+
+        let pred = score.prediction.as_ref().unwrap();
+        assert_eq!(pred.file, "test.rs");
+        assert_eq!(pred.current_churn, 40.0);
+        assert!(pred.predicted_churn_7days >= 0.0);
+        assert!(pred.predicted_churn_14days >= 0.0);
+    }
+
+    #[test]
+    fn test_prediction_field_none_with_insufficient_data() {
+        // Test that prediction is None if churn history has less than 2 points
+        let mut metrics = HashMap::new();
+
+        let m1 = FileMetrics {
+            file: "single_point.rs".to_string(),
+            loc_history: vec![],
+            churn_history: vec![ChurnMetric {
+                file: "single_point.rs".to_string(),
+                timestamp: Utc::now(),
+                churn_percentage: 30.0,
+            }],
+            authors: vec![],
+            complexity_history: vec![],
+        };
+
+        metrics.insert("single_point.rs".to_string(), m1);
+
+        let scores = calculate_risk_scores(&metrics, 10).unwrap();
+        assert_eq!(scores.len(), 1);
+
+        // Verify prediction is None due to insufficient data
+        let score = &scores[0];
+        assert!(
+            score.prediction.is_none(),
+            "prediction should be None with insufficient churn data"
+        );
+    }
+
+    #[test]
+    fn test_prediction_populated_with_sufficient_data() {
+        // Test that prediction is populated with sufficient churn history
+        let mut metrics = HashMap::new();
+
+        let m1 = FileMetrics {
+            file: "adequate.rs".to_string(),
+            loc_history: vec![],
+            churn_history: vec![
+                ChurnMetric {
+                    file: "adequate.rs".to_string(),
+                    timestamp: Utc::now() - chrono::Duration::days(4),
+                    churn_percentage: 20.0,
+                },
+                ChurnMetric {
+                    file: "adequate.rs".to_string(),
+                    timestamp: Utc::now() - chrono::Duration::days(3),
+                    churn_percentage: 25.0,
+                },
+                ChurnMetric {
+                    file: "adequate.rs".to_string(),
+                    timestamp: Utc::now() - chrono::Duration::days(2),
+                    churn_percentage: 30.0,
+                },
+                ChurnMetric {
+                    file: "adequate.rs".to_string(),
+                    timestamp: Utc::now() - chrono::Duration::days(1),
+                    churn_percentage: 35.0,
+                },
+                ChurnMetric {
+                    file: "adequate.rs".to_string(),
+                    timestamp: Utc::now(),
+                    churn_percentage: 40.0,
+                },
+            ],
+            authors: vec![],
+            complexity_history: vec![],
+        };
+
+        metrics.insert("adequate.rs".to_string(), m1);
+
+        let scores = calculate_risk_scores(&metrics, 10).unwrap();
+        assert_eq!(scores.len(), 1);
+
+        // Verify prediction is fully populated
+        let score = &scores[0];
+        assert!(score.prediction.is_some());
+
+        let pred = score.prediction.as_ref().unwrap();
+        assert_eq!(pred.file, "adequate.rs");
+        assert_eq!(pred.current_churn, 40.0);
+        assert!(pred.predicted_churn_7days > pred.current_churn);
+        assert!(pred.predicted_churn_14days >= pred.predicted_churn_7days);
+        assert!(pred.prediction_confidence >= 0.5);
+    }
+
+    #[test]
+    fn test_existing_risk_fields_unchanged_with_prediction() {
+        // Test backward compatibility: all existing risk fields remain unchanged
+        let mut metrics = HashMap::new();
+
+        let m1 = FileMetrics {
+            file: "backward_compat.rs".to_string(),
+            loc_history: vec![
+                LOCMetric {
+                    file: "backward_compat.rs".to_string(),
+                    timestamp: Utc::now(),
+                    lines: 250,
+                },
+            ],
+            churn_history: vec![
+                ChurnMetric {
+                    file: "backward_compat.rs".to_string(),
+                    timestamp: Utc::now() - chrono::Duration::days(1),
+                    churn_percentage: 50.0,
+                },
+                ChurnMetric {
+                    file: "backward_compat.rs".to_string(),
+                    timestamp: Utc::now(),
+                    churn_percentage: 65.0,
+                },
+            ],
+            authors: vec![
+                AuthorFrequency {
+                    file: "backward_compat.rs".to_string(),
+                    author: "alice".to_string(),
+                    commits: 10,
+                    lines_changed: 100,
+                },
+                AuthorFrequency {
+                    file: "backward_compat.rs".to_string(),
+                    author: "bob".to_string(),
+                    commits: 8,
+                    lines_changed: 80,
+                },
+            ],
+            complexity_history: vec![
+                ComplexityMetric {
+                    file: "backward_compat.rs".to_string(),
+                    timestamp: Utc::now(),
+                    estimated_complexity: 7.5,
+                },
+            ],
+        };
+
+        metrics.insert("backward_compat.rs".to_string(), m1);
+
+        let scores = calculate_risk_scores(&metrics, 20).unwrap();
+        assert_eq!(scores.len(), 1);
+
+        let score = &scores[0];
+
+        // Verify all existing fields are still present and correct
+        assert_eq!(score.file, "backward_compat.rs");
+        assert!(score.risk_value > 0.0);
+        assert!(!format!("{:?}", score.risk_level).is_empty());
+        assert_eq!(score.churn_percentage, 65.0);
+        assert_eq!(score.loc, 250);
+        assert_eq!(score.author_count, 2);
+        assert_eq!(score.recent_commits, 18); // sum of commits from all authors
+        assert_eq!(score.complexity, 7.5);
+        assert!(!format!("{:?}", score.trend).is_empty());
+        assert!(!score.recommendation.is_empty());
+        assert!(score.last_modified_days_ago <= 1); // should be 0 or 1
+
+        // And verify prediction is also available
+        assert!(score.prediction.is_some());
+    }
+
+    #[test]
+    fn test_multiple_files_all_have_predictions() {
+        // Integration test: multiple files all have predictions calculated
+        let mut metrics = HashMap::new();
+
+        for i in 1..=3 {
+            let filename = format!("file{}.rs", i);
+            let churn_values = vec![10.0 + i as f64, 20.0 + i as f64, 30.0 + i as f64];
+
+            let churn_history: Vec<ChurnMetric> = churn_values
+                .iter()
+                .enumerate()
+                .map(|(idx, &val)| ChurnMetric {
+                    file: filename.clone(),
+                    timestamp: Utc::now() - chrono::Duration::days(2 - idx as i64),
+                    churn_percentage: val,
+                })
+                .collect();
+
+            let m = FileMetrics {
+                file: filename.clone(),
+                loc_history: vec![],
+                churn_history,
+                authors: vec![],
+                complexity_history: vec![],
+            };
+
+            metrics.insert(filename, m);
+        }
+
+        let scores = calculate_risk_scores(&metrics, 10).unwrap();
+        assert_eq!(scores.len(), 3);
+
+        // Verify all files have predictions
+        for score in &scores {
+            assert!(
+                score.prediction.is_some(),
+                "file {} should have prediction",
+                score.file
+            );
+            let pred = score.prediction.as_ref().unwrap();
+            assert_eq!(pred.file, score.file);
+            assert!(pred.current_churn > 0.0);
+        }
+    }
+
+    #[test]
+    fn test_prediction_warning_levels_integrated() {
+        // Test that prediction warning levels are properly set in integrated risk calculation
+        let mut metrics = HashMap::new();
+
+        // Create a file with degrading churn (should have warning)
+        let degrading_churn: Vec<ChurnMetric> = vec![
+            5.0, 15.0, 25.0, 35.0, 45.0, 55.0, 65.0,
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(idx, val)| ChurnMetric {
+            file: "degrading.rs".to_string(),
+            timestamp: Utc::now() - chrono::Duration::days(6 - idx as i64),
+            churn_percentage: val,
+        })
+        .collect();
+
+        let m1 = FileMetrics {
+            file: "degrading.rs".to_string(),
+            loc_history: vec![],
+            churn_history: degrading_churn,
+            authors: vec![],
+            complexity_history: vec![],
+        };
+
+        metrics.insert("degrading.rs".to_string(), m1);
+
+        let scores = calculate_risk_scores(&metrics, 10).unwrap();
+        assert_eq!(scores.len(), 1);
+
+        let score = &scores[0];
+        assert!(score.prediction.is_some());
+
+        let pred = score.prediction.as_ref().unwrap();
+        // With 65% current churn and increasing trend, should have a warning
+        assert_ne!(
+            pred.warning_level,
+            PredictionWarning::None,
+            "degrading file should have warning"
+        );
+    }
+
+    #[test]
+    fn test_risk_score_prediction_consistency() {
+        // Test that prediction data is consistent with risk_value and trend
+        let mut metrics = HashMap::new();
+
+        let m1 = FileMetrics {
+            file: "consistency.rs".to_string(),
+            loc_history: vec![],
+            churn_history: vec![
+                ChurnMetric {
+                    file: "consistency.rs".to_string(),
+                    timestamp: Utc::now() - chrono::Duration::days(1),
+                    churn_percentage: 20.0,
+                },
+                ChurnMetric {
+                    file: "consistency.rs".to_string(),
+                    timestamp: Utc::now(),
+                    churn_percentage: 50.0,
+                },
+            ],
+            authors: vec![],
+            complexity_history: vec![],
+        };
+
+        metrics.insert("consistency.rs".to_string(), m1);
+
+        let scores = calculate_risk_scores(&metrics, 10).unwrap();
+        let score = &scores[0];
+
+        // With high churn increase, trend should be degrading
+        assert_eq!(score.trend, ChurnTrend::Degrading);
+
+        // Prediction should also reflect degradation
+        assert!(score.prediction.is_some());
+        let pred = score.prediction.as_ref().unwrap();
+        assert!(
+            pred.predicted_churn_14days >= pred.current_churn,
+            "degrading trend should predict equal or higher churn"
+        );
     }
 }

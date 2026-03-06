@@ -228,6 +228,7 @@ pub struct RiskScore {
     pub trend: ChurnTrend,
     pub recommendation: String,
     pub last_modified_days_ago: usize,
+    pub prediction: Option<ChurnPrediction>,
 }
 
 impl fmt::Display for RiskScore {
@@ -319,6 +320,7 @@ mod tests {
             trend: ChurnTrend::Degrading,
             recommendation: "Monitor".to_string(),
             last_modified_days_ago: 3,
+            prediction: None,
         };
         assert_eq!(score.file, "test.rs");
         assert_eq!(score.risk_value, 5.5);
