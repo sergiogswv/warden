@@ -205,7 +205,7 @@ fn should_ignore_file(repo_path: &Path, file: &str) -> bool {
 }
 
 /// Check if a file should be excluded based on its extension
-/// Excludes: documentation, config, assets, and non-source files
+/// Excludes: documentation, config, assets, test files, and non-source files
 fn should_exclude_by_extension(file: &str) -> bool {
     let excluded_extensions = [
         // Documentation
@@ -214,7 +214,8 @@ fn should_exclude_by_extension(file: &str) -> bool {
         // Assets
         ".svg", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".webp", // Style/Formatting
         ".css", ".scss", ".less", // Build/Dist
-        ".lock", ".min.js", ".min.css", // Other non-source
+        ".lock", ".min.js", ".min.css", // Test files
+        ".spec.ts", ".spec.js", ".spec.tsx", ".spec.jsx", ".test.ts", ".test.js", ".test.tsx", ".test.jsx", ".e2e.ts", ".e2e.js", ".integration.ts", ".integration.js", // Other non-source
         ".pdf", ".doc", ".docx",
     ];
 
@@ -335,6 +336,15 @@ mod tests {
         assert!(should_exclude_by_extension("logo.svg"));
         assert!(should_exclude_by_extension("image.png"));
         assert!(should_exclude_by_extension("style.css"));
+
+        // Test files should be excluded
+        assert!(should_exclude_by_extension("app.spec.ts"));
+        assert!(should_exclude_by_extension("utils.test.js"));
+        assert!(should_exclude_by_extension("src/api.spec.tsx"));
+        assert!(should_exclude_by_extension("tests/integration.test.ts"));
+        assert!(should_exclude_by_extension("e2e.test.js"));
+        assert!(should_exclude_by_extension("user.e2e.ts"));
+        assert!(should_exclude_by_extension("database.integration.ts"));
 
         // Source files should NOT be excluded
         assert!(!should_exclude_by_extension("src/main.rs"));
