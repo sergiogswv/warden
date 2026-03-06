@@ -121,19 +121,14 @@ pub fn parse_git_history(repo_path: &Path, period: &str) -> anyhow::Result<Vec<E
 
                     let stats = line[pipe_idx + 1..].trim();
 
-                    let mut additions = 0;
-                    let mut deletions = 0;
-
                     // Extract numeric value before the +/- symbols
                     // e.g., "21 ++++++++++++---" → 21
                     let parts: Vec<&str> = stats.split_whitespace().collect();
-                    if !parts.is_empty() {
-                        if let Ok(num) = parts[0].parse::<usize>() {
-                            // This is the number of changed lines in this commit
-                            // We'll get the total LOC separately
-                            additions = num;
-                        }
-                    }
+                    let additions = if !parts.is_empty() {
+                        parts[0].parse::<usize>().unwrap_or(0)
+                    } else {
+                        0
+                    };
 
                     if additions > 0 {
                         commit.file_changes.insert(

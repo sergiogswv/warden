@@ -8,7 +8,7 @@ use std::collections::HashMap;
 /// Calculate risk scores for all files in metrics
 pub fn calculate_risk_scores(
     file_metrics: &HashMap<String, FileMetrics>,
-    total_commits: usize,
+    _total_commits: usize,
 ) -> anyhow::Result<Vec<RiskScore>> {
     // Calculate baseline (dynamic)
     let mut total_risk = 0.0;

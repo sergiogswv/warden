@@ -7,7 +7,7 @@ use crate::models::AnalysisResult;
 pub fn show_main_menu(analysis: &AnalysisResult) -> anyhow::Result<()> {
     println!();
     println!("╔════════════════════════════════════╗");
-    println!("║   Warden v0.3.0                    ║");
+    println!("║   Warden v0.4.0                    ║");
     println!("║   Code Quality Historical Analysis ║");
     println!("╚════════════════════════════════════╝");
     println!();

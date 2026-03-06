@@ -5,7 +5,7 @@ use warden::{analytics, cache, git_parser, metrics, models, risk_scorer, ui};
 #[derive(Parser)]
 #[command(name = "Warden")]
 #[command(about = "Historical code quality analysis and predictive architecture insights")]
-#[command(version = "0.3.0")]
+#[command(version = "0.4.0")]
 #[command(author = "Sergio Guadarrama")]
 struct Args {
     /// Path to Git repository (defaults to current directory)
@@ -107,7 +107,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     println!("╔════════════════════════════════════╗");
-    println!("║   Warden v0.3.0                    ║");
+    println!("║   Warden v0.4.0                    ║");
     println!("║   Code Quality Historical Analysis ║");
     println!("╚════════════════════════════════════╝");
     println!();
@@ -186,7 +186,7 @@ fn main() -> anyhow::Result<()> {
         }
         _ => {
             ui::show_main_menu(&analysis)?;
-            ui::render_hotspots_with_risk(&risk_scores, 10);
+            ui::render_hotspots_with_risk_and_predictions(&risk_scores, 10);
         }
     }
 
