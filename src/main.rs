@@ -118,66 +118,64 @@ fn main() -> anyhow::Result<()> {
     println!();
 
     // Try to load from cache first
-    if let Ok(Some(cached_analysis)) = cache::load_cache(&repo_path) {
+    let (analysis, risk_scores) = if let Ok(Some(cached_analysis)) = cache::load_cache(&repo_path) {
         println!("✅ Using cached results (use 'warden clear-cache' to refresh)");
         println!();
 
-        return match args.format.as_str() {
-            "json" => {
-                ui::export_json(&cached_analysis, "warden-report.json")?;
-                Ok(())
-            }
-            _ => {
-                ui::show_main_menu(&cached_analysis)?;
-                Ok(())
-            }
+        // Recalculate risk scores from cached metrics
+        let risk_scores = risk_scorer::calculate_risk_scores(
+            &cached_analysis.file_metrics,
+            cached_analysis.total_commits,
+        )?;
+        (cached_analysis, risk_scores)
+    } else {
+        // Parse git history
+        println!("🔍 Parsing Git history...");
+        let commits =
+            git_parser::parse_git_history(&repo_path, &args.history).unwrap_or_else(|_| vec![]);
+
+        println!("   ✓ {} commits analyzed", commits.len());
+
+        // Process commits to calculate real metrics
+        println!("📈 Calculating file metrics...");
+        let file_metrics = metrics::process_commits(&commits)?;
+        println!("   ✓ {} files analyzed", file_metrics.len());
+
+        // Count unique authors
+        let unique_authors: std::collections::HashSet<_> =
+            commits.iter().map(|c| c.author.clone()).collect();
+
+        println!("👥 Identified {} unique authors", unique_authors.len());
+
+        use chrono::Utc;
+
+        let mut analysis = models::AnalysisResult {
+            repository_path: repo_path.to_string_lossy().to_string(),
+            analysis_period: args.history.clone(),
+            files_analyzed: file_metrics.len(),
+            total_commits: commits.len(),
+            authors_count: unique_authors.len(),
+            file_metrics, // Now has real data
+            predictions: vec![],
+            overall_trend: models::Trend::Stable,
+            timestamp: Utc::now(),
         };
-    }
 
-    // Parse git history
-    println!("🔍 Parsing Git history...");
-    let commits =
-        git_parser::parse_git_history(&repo_path, &args.history).unwrap_or_else(|_| vec![]);
+        // Detect trend using real metrics data
+        println!("🔍 Analyzing trends...");
+        analysis.overall_trend = analytics::detect_trend(&analysis);
 
-    println!("   ✓ {} commits analyzed", commits.len());
+        // Calculate risk scores
+        println!("🎯 Calculating risk scores...");
+        let risk_scores =
+            risk_scorer::calculate_risk_scores(&analysis.file_metrics, analysis.total_commits)?;
+        println!("   ✓ Risk scoring complete\n");
 
-    // Process commits to calculate real metrics
-    println!("📈 Calculating file metrics...");
-    let file_metrics = metrics::process_commits(&commits)?;
-    println!("   ✓ {} files analyzed", file_metrics.len());
+        // Cache results
+        let _ = cache::save_cache(&repo_path, &analysis);
 
-    // Count unique authors
-    let unique_authors: std::collections::HashSet<_> =
-        commits.iter().map(|c| c.author.clone()).collect();
-
-    println!("👥 Identified {} unique authors", unique_authors.len());
-
-    use chrono::Utc;
-
-    let mut analysis = models::AnalysisResult {
-        repository_path: repo_path.to_string_lossy().to_string(),
-        analysis_period: args.history.clone(),
-        files_analyzed: file_metrics.len(),
-        total_commits: commits.len(),
-        authors_count: unique_authors.len(),
-        file_metrics, // Now has real data
-        predictions: vec![],
-        overall_trend: models::Trend::Stable,
-        timestamp: Utc::now(),
+        (analysis, risk_scores)
     };
-
-    // Detect trend using real metrics data
-    println!("🔍 Analyzing trends...");
-    analysis.overall_trend = analytics::detect_trend(&analysis);
-
-    // Calculate risk scores
-    println!("🎯 Calculating risk scores...");
-    let risk_scores =
-        risk_scorer::calculate_risk_scores(&analysis.file_metrics, analysis.total_commits)?;
-    println!("   ✓ Risk scoring complete\n");
-
-    // Cache results
-    let _ = cache::save_cache(&repo_path, &analysis);
 
     // Render based on format
     match args.format.as_str() {
@@ -185,8 +183,36 @@ fn main() -> anyhow::Result<()> {
             ui::export_json(&analysis, "warden-report.json")?;
         }
         _ => {
-            ui::show_main_menu(&analysis)?;
-            ui::render_hotspots_with_risk_and_predictions(&risk_scores, 10);
+            // Show main menu summary unless --only-* flags are used
+            if !args.only_trends && !args.only_hotspots && !args.only_predictions {
+                ui::show_main_menu(&analysis)?;
+                ui::render_hotspots_with_risk_and_predictions(&risk_scores, 10);
+            } else {
+                // Only show header when using --only-* flags
+                println!();
+                println!("╔════════════════════════════════════╗");
+                println!("║   Warden v0.4.0                    ║");
+                println!("║   Code Quality Historical Analysis ║");
+                println!("╚════════════════════════════════════╝");
+                println!();
+
+                // Show requested sections
+                if args.only_trends {
+                    println!("📈 TREND ANALYSIS:");
+                    println!("   • Overall Trend: {}", analysis.overall_trend);
+                    ui::render_debt_trends(&analysis)?;
+                }
+
+                if args.only_hotspots {
+                    println!("🔴 HOTSPOT ANALYSIS:");
+                    ui::render_hotspots_with_risk_and_predictions(&risk_scores, 20);
+                }
+
+                if args.only_predictions {
+                    println!("🔮 PREDICTIVE ALERTS:");
+                    ui::render_alerts(&analysis)?;
+                }
+            }
         }
     }
 
