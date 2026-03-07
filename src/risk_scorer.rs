@@ -5,6 +5,29 @@ use crate::predictor::predict_churn_trajectory;
 use chrono::Utc;
 use std::collections::HashMap;
 
+/// Detect if a file has undergone recent refactoring based on LOC reduction
+/// Returns Some(pct_reduction) if LOC has been reduced by ≥30%, None otherwise
+fn detect_refactoring(loc_history: &[LOCMetric]) -> Option<f64> {
+    if loc_history.len() < 2 {
+        return None;
+    }
+
+    let current_loc = loc_history.last().map(|l| l.lines)?;
+    let max_loc = loc_history.iter().map(|l| l.lines).max()?;
+
+    if current_loc == 0 || max_loc <= current_loc {
+        return None;
+    }
+
+    let reduction_pct = (max_loc - current_loc) as f64 / max_loc as f64 * 100.0;
+
+    if reduction_pct >= 30.0 {
+        Some(reduction_pct)
+    } else {
+        None
+    }
+}
+
 /// Calculate risk scores for all files in metrics
 pub fn calculate_risk_scores(
     file_metrics: &HashMap<String, FileMetrics>,
@@ -76,9 +99,24 @@ pub fn calculate_risk_scores(
             loc,
         );
 
+        // Detect refactoring and apply attenuation if detected
+        let refactor_detected = detect_refactoring(&metrics.loc_history);
+        if refactor_detected.is_some() {
+            // Apply additional attenuation factor × 0.6 for refactored files
+            // Refactoring is a positive signal, not a degradation
+            risk_value = risk_value * 0.6;
+        }
+
         let risk_level = classify_risk_level(risk_value);
         let trend = detect_churn_trend(&metrics.churn_history);
-        let recommendation = generate_recommendation(risk_value, loc, authors, &trend);
+        let recommendation = generate_recommendation(
+            risk_value,
+            loc,
+            authors,
+            &trend,
+            &metrics.loc_history,
+            refactor_detected,
+        );
 
         // Calculate prediction from churn history
         // Extract churn percentages from churn_history
@@ -104,6 +142,7 @@ pub fn calculate_risk_scores(
             recommendation,
             last_modified_days_ago,
             prediction,
+            refactor_detected,
         });
     }
 
@@ -200,15 +239,55 @@ fn detect_churn_trend(churn_history: &[ChurnMetric]) -> ChurnTrend {
     }
 }
 
-fn generate_recommendation(risk: f64, loc: usize, authors: usize, trend: &ChurnTrend) -> String {
+fn generate_recommendation(
+    risk: f64,
+    loc: usize,
+    authors: usize,
+    trend: &ChurnTrend,
+    loc_history: &[LOCMetric],
+    refactor_detected: Option<f64>,
+) -> String {
+    // Case 1: Refactoring detected
+    if let Some(pct_reduction) = refactor_detected {
+        return format!(
+            "Refactoring detected (LOC -{}%). Monitor stabilization",
+            pct_reduction as u32
+        );
+    }
+
+    // Case 2: High churn with growing LOC (instability + expansion = bad)
+    if risk > 5.0 && loc > 100 {
+        let is_growing = loc_history.len() >= 2
+            && loc_history[loc_history.len() - 1].lines > loc_history[0].lines;
+
+        if is_growing {
+            return "Growing with high churn - refactor needed".to_string();
+        }
+    }
+
+    // Case 3: High churn with stable/shrinking LOC (okay, file is under control)
+    if risk > 5.0 && loc < 100 {
+        return "Monitor - code instability, consider refactoring".to_string();
+    }
+
+    // Case 4: Degrading trend (churn increasing)
+    if *trend == ChurnTrend::Degrading {
+        return "Degrading - churn increasing".to_string();
+    }
+
+    // Case 5: Large file with multiple authors and high risk
+    if risk > 5.0 && authors > 3 {
+        return "Refactor - fragmented ownership + high churn".to_string();
+    }
+
+    // Case 6: Very high risk with large file
     if risk > 8.0 && loc > 200 {
-        "Refactor immediately - large, unstable file".to_string()
-    } else if risk > 5.0 && authors > 3 {
-        "Refactor - fragmented ownership + high churn".to_string()
-    } else if risk > 5.0 {
+        return "Refactor immediately - large, unstable file".to_string();
+    }
+
+    // Default
+    if risk > 5.0 {
         "Monitor - high churn detected".to_string()
-    } else if *trend == ChurnTrend::Degrading {
-        "Degrading - churn increasing".to_string()
     } else {
         "Safe - stable file".to_string()
     }
@@ -227,6 +306,80 @@ fn calculate_days_since_modified(churn_history: &[ChurnMetric]) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_detect_refactoring() {
+        // Test: 30% reduction (threshold) - should detect
+        let loc_history = vec![
+            LOCMetric {
+                file: "test.rs".to_string(),
+                timestamp: Utc::now() - chrono::Duration::days(10),
+                lines: 100,
+            },
+            LOCMetric {
+                file: "test.rs".to_string(),
+                timestamp: Utc::now(),
+                lines: 70, // 30% reduction
+            },
+        ];
+        assert_eq!(detect_refactoring(&loc_history), Some(30.0));
+
+        // Test: 56% reduction (like 321→142) - should detect
+        let loc_history2 = vec![
+            LOCMetric {
+                file: "service.ts".to_string(),
+                timestamp: Utc::now() - chrono::Duration::days(30),
+                lines: 321,
+            },
+            LOCMetric {
+                file: "service.ts".to_string(),
+                timestamp: Utc::now(),
+                lines: 142, // 56% reduction
+            },
+        ];
+        let result = detect_refactoring(&loc_history2);
+        assert!(result.is_some());
+        let pct = result.unwrap();
+        assert!(pct > 55.0 && pct < 57.0);
+
+        // Test: 20% reduction - should NOT detect
+        let loc_history3 = vec![
+            LOCMetric {
+                file: "test.rs".to_string(),
+                timestamp: Utc::now() - chrono::Duration::days(5),
+                lines: 100,
+            },
+            LOCMetric {
+                file: "test.rs".to_string(),
+                timestamp: Utc::now(),
+                lines: 80, // 20% reduction
+            },
+        ];
+        assert_eq!(detect_refactoring(&loc_history3), None);
+
+        // Test: LOC growth - should NOT detect
+        let loc_history4 = vec![
+            LOCMetric {
+                file: "test.rs".to_string(),
+                timestamp: Utc::now() - chrono::Duration::days(5),
+                lines: 100,
+            },
+            LOCMetric {
+                file: "test.rs".to_string(),
+                timestamp: Utc::now(),
+                lines: 150, // 50% increase
+            },
+        ];
+        assert_eq!(detect_refactoring(&loc_history4), None);
+
+        // Test: Single point history - should NOT detect
+        let loc_history5 = vec![LOCMetric {
+            file: "test.rs".to_string(),
+            timestamp: Utc::now(),
+            lines: 100,
+        }];
+        assert_eq!(detect_refactoring(&loc_history5), None);
+    }
 
     #[test]
     fn test_risk_level_classification() {
@@ -269,11 +422,36 @@ mod tests {
 
     #[test]
     fn test_recommendation_generation() {
-        let rec1 = generate_recommendation(9.0, 300, 2, &ChurnTrend::Stable);
+        // Test: Large, unstable file
+        let rec1 = generate_recommendation(9.0, 300, 2, &ChurnTrend::Stable, &[], None);
         assert!(rec1.contains("Refactor immediately"));
 
-        let rec3 = generate_recommendation(1.0, 50, 1, &ChurnTrend::Stable);
+        // Test: Safe, stable file
+        let rec3 = generate_recommendation(1.0, 50, 1, &ChurnTrend::Stable, &[], None);
         assert!(rec3.contains("Safe"));
+
+        // Test: Refactoring detected
+        let loc_history = vec![
+            LOCMetric {
+                file: "test.rs".to_string(),
+                timestamp: Utc::now(),
+                lines: 200,
+            },
+            LOCMetric {
+                file: "test.rs".to_string(),
+                timestamp: Utc::now(),
+                lines: 100,
+            },
+        ];
+        let rec_refactor = generate_recommendation(
+            5.0,
+            100,
+            2,
+            &ChurnTrend::Stable,
+            &loc_history,
+            Some(50.0),
+        );
+        assert!(rec_refactor.contains("Refactoring detected"));
     }
 
     #[test]
@@ -764,6 +942,71 @@ mod tests {
             pred.warning_level,
             PredictionWarning::None,
             "degrading file should have warning"
+        );
+    }
+
+    #[test]
+    fn test_refactoring_attenuation_in_risk_calculation() {
+        // Test that detected refactoring applies the 0.6 attenuation factor
+        let mut metrics = HashMap::new();
+
+        // Create metrics with 56% LOC reduction (like 321→142)
+        let m1 = FileMetrics {
+            file: "deal-migration.service.ts".to_string(),
+            loc_history: vec![
+                LOCMetric {
+                    file: "deal-migration.service.ts".to_string(),
+                    timestamp: Utc::now() - chrono::Duration::days(30),
+                    lines: 321,
+                },
+                LOCMetric {
+                    file: "deal-migration.service.ts".to_string(),
+                    timestamp: Utc::now(),
+                    lines: 142,
+                },
+            ],
+            churn_history: vec![
+                ChurnMetric {
+                    file: "deal-migration.service.ts".to_string(),
+                    timestamp: Utc::now() - chrono::Duration::days(1),
+                    churn_percentage: 200.0,
+                },
+                ChurnMetric {
+                    file: "deal-migration.service.ts".to_string(),
+                    timestamp: Utc::now(),
+                    churn_percentage: 254.0, // High churn
+                },
+            ],
+            authors: vec![],
+            complexity_history: vec![],
+        };
+
+        metrics.insert("deal-migration.service.ts".to_string(), m1);
+
+        let scores = calculate_risk_scores(&metrics, 10).unwrap();
+        assert_eq!(scores.len(), 1);
+
+        let score = &scores[0];
+
+        // Verify refactoring was detected
+        assert!(score.refactor_detected.is_some());
+        let reduction = score.refactor_detected.unwrap();
+        assert!(reduction > 55.0 && reduction < 57.0, "Expected ~56% reduction, got {}", reduction);
+
+        // Verify recommendation mentions refactoring
+        assert!(
+            score.recommendation.contains("Refactoring detected"),
+            "Recommendation should mention refactoring: {}",
+            score.recommendation
+        );
+
+        // Verify that risk score was attenuated
+        // Without refactoring attenuation, with 254% churn and 142 LOC, risk would be much higher
+        // With 0.6 attenuation, it should be lower
+        // The risk should be in Monitor/Alert range, not Critical
+        assert!(
+            score.risk_level != RiskLevel::Critical,
+            "Refactored file should not be Critical - attenuation not applied?"
         );
     }
 

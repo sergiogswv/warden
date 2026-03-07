@@ -229,6 +229,7 @@ pub struct RiskScore {
     pub recommendation: String,
     pub last_modified_days_ago: usize,
     pub prediction: Option<ChurnPrediction>,
+    pub refactor_detected: Option<f64>, // Some(pct_reduction) if refactoring detected, None otherwise
 }
 
 impl fmt::Display for RiskScore {
@@ -321,6 +322,7 @@ mod tests {
             recommendation: "Monitor".to_string(),
             last_modified_days_ago: 3,
             prediction: None,
+            refactor_detected: None,
         };
         assert_eq!(score.file, "test.rs");
         assert_eq!(score.risk_value, 5.5);

@@ -14,7 +14,7 @@ Or with manual installation:
 
 ```bash
 # Download the latest release
-curl -L -o /tmp/warden-linux.tar.gz https://github.com/sergiogswv/warden/releases/download/v0.2.0/warden-linux-x86_64.tar.gz
+curl -L -o /tmp/warden-linux.tar.gz https://github.com/sergiogswv/warden/releases/download/v0.5.0/warden-linux-x86_64.tar.gz
 tar -xzf /tmp/warden-linux.tar.gz
 sudo mv warden-linux-x86_64 /usr/local/bin/warden
 chmod +x /usr/local/bin/warden
@@ -39,10 +39,10 @@ brew install warden
 ```bash
 # Download the appropriate binary
 # For Apple Silicon:
-curl -L -o /tmp/warden-macos.tar.gz https://github.com/sergiogswv/warden/releases/download/v0.2.0/warden-macos-aarch64.tar.gz
+curl -L -o /tmp/warden-macos.tar.gz https://github.com/sergiogswv/warden/releases/download/v0.5.0/warden-macos-aarch64.tar.gz
 
 # For Intel Mac:
-curl -L -o /tmp/warden-macos.tar.gz https://github.com/sergiogswv/warden/releases/download/v0.2.0/warden-macos-x86_64.tar.gz
+curl -L -o /tmp/warden-macos.tar.gz https://github.com/sergiogswv/warden/releases/download/v0.5.0/warden-macos-x86_64.tar.gz
 
 tar -xzf /tmp/warden-macos.tar.gz
 sudo mv warden-macos-* /usr/local/bin/warden
@@ -106,14 +106,14 @@ This automatically:
 
 ```bash
 # 1. Update version
-echo "0.2.0" > .version
+echo "0.5.0" > .version
 
 # 2. Build and test
 cargo build --release
 ./target/release/warden --version
 
 # 3. Publish
-./installers/release.sh 0.2.0
+./installers/release.sh 0.5.0
 ```
 
 ## Building Release Binaries
@@ -213,8 +213,8 @@ warden
 1. Create a new release tag:
 
 ```bash
-git tag -a v0.2.0 -m "Warden v0.2.0"
-git push origin v0.2.0
+git tag -a v0.5.0 -m "Warden v0.5.0"
+git push origin v0.5.0
 ```
 
 2. Build binaries:
@@ -226,7 +226,7 @@ git push origin v0.2.0
 3. Upload to GitHub releases:
 
 ```bash
-gh release create v0.2.0 release-0.1.0/* --title "Warden v0.2.0" --notes "See CHANGELOG for details"
+gh release create v0.5.0 release-0.5.0/* --title "Warden v0.5.0" --notes "See CHANGELOG for details"
 ```
 
 ### Update Homebrew Formula
@@ -273,5 +273,5 @@ For issues or improvements:
 
 ---
 
-**Version**: 0.1.0
-**Last Updated**: 2026-03-05
+**Version**: 0.5.0
+**Last Updated**: 2026-03-06

@@ -7,7 +7,7 @@ use crate::models::AnalysisResult;
 pub fn show_main_menu(analysis: &AnalysisResult) -> anyhow::Result<()> {
     println!();
     println!("╔════════════════════════════════════╗");
-    println!("║   Warden v0.4.0                    ║");
+    println!("║   Warden v0.5.0                    ║");
     println!("║   Code Quality Historical Analysis ║");
     println!("╚════════════════════════════════════╝");
     println!();
@@ -171,6 +171,11 @@ pub fn render_hotspots_with_risk(risk_scores: &[crate::models::RiskScore], top_n
             "   ├─ Last modified: {} days ago",
             score.last_modified_days_ago
         );
+
+        if let Some(pct_reduction) = score.refactor_detected {
+            println!("   ├─ Refactoring: ✅ Detected (LOC -{}%)", pct_reduction as u32);
+        }
+
         println!("   └─ Recommendation: {}", score.recommendation);
         println!();
     }
@@ -220,6 +225,10 @@ pub fn render_hotspots_with_risk_and_predictions(risk_scores: &[crate::models::R
             "   ├─ Last modified: {} days ago",
             score.last_modified_days_ago
         );
+
+        if let Some(pct_reduction) = score.refactor_detected {
+            println!("   ├─ Refactoring: ✅ Detected (LOC -{}%)", pct_reduction as u32);
+        }
 
         if let Some(prediction) = &score.prediction {
             println!("   ├─ Recommendation: {}", score.recommendation);
@@ -298,6 +307,7 @@ mod tests {
                     prediction_confidence: 0.85,
                     warning_level: PredictionWarning::Critical,
                 }),
+                refactor_detected: None,
             },
         ];
 
@@ -328,6 +338,7 @@ mod tests {
                     prediction_confidence: 0.80,
                     warning_level: PredictionWarning::Watch,
                 }),
+                refactor_detected: None,
             },
         ];
 
@@ -350,6 +361,7 @@ mod tests {
                 recommendation: "No action needed".to_string(),
                 last_modified_days_ago: 30,
                 prediction: None,
+                refactor_detected: None,
             },
         ];
 
@@ -380,6 +392,7 @@ mod tests {
                     prediction_confidence: 0.95,
                     warning_level: PredictionWarning::Critical,
                 }),
+                refactor_detected: None,
             },
             crate::models::RiskScore {
                 file: "src/file2.rs".to_string(),
@@ -402,6 +415,7 @@ mod tests {
                     prediction_confidence: 0.85,
                     warning_level: PredictionWarning::Watch,
                 }),
+                refactor_detected: None,
             },
             crate::models::RiskScore {
                 file: "src/file3.rs".to_string(),
@@ -416,6 +430,7 @@ mod tests {
                 recommendation: "Monitor".to_string(),
                 last_modified_days_ago: 7,
                 prediction: None,
+                refactor_detected: None,
             },
         ];
 
@@ -446,6 +461,7 @@ mod tests {
                     prediction_confidence: 0.70,
                     warning_level: PredictionWarning::None,
                 }),
+                refactor_detected: None,
             },
         ];
 
@@ -482,6 +498,7 @@ mod tests {
                     prediction_confidence: 0.925,
                     warning_level: PredictionWarning::Critical,
                 }),
+                refactor_detected: None,
             },
         ];
 

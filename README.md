@@ -3,7 +3,7 @@
 **Historical code quality analysis and predictive architecture insights for modern development teams.**
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.3.0-blue.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.5.0-blue.svg" alt="Version">
   <img src="https://img.shields.io/badge/rust-2024-orange.svg" alt="Rust">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
 </p>
@@ -19,8 +19,10 @@ Complements **Sentinel** (real-time monitoring) and **Architect Linter** (pre-co
 ### ✨ Key Features
 
 - 📊 **Technical Debt Tracking** - Visualize code quality evolution
-- 🔮 **Predictive Alerts** - Know which modules will become unmaintainable
+- 🔮 **Predictive Alerts** - Know which modules will become unmaintainable (7/14-day forecasts)
 - 🏆 **Hotspot Detection** - Identify files with high churn and complexity
+- ✅ **Refactoring Detection** - Recognize successful refactoring (≥30% LOC reduction) and avoid false alerts
+- 🎯 **Contextual Analysis** - Distinguish between refactoring, degradation, and growth patterns
 - 👤 **Author Analytics** - See who touches what and when
 - 🔀 **Branch Comparison** - Compare current branch vs main
 - 📈 **Interactive Reports** - Menu-driven terminal interface
@@ -109,6 +111,40 @@ File B: src/api/client.ts
 - Risk: (85 × 450 × 3) / baseline = 11.4 🔴 Critical
 → Action: Large file, highly modified by multiple people
 ```
+
+---
+
+## 🔧 Refactoring Detection (v0.5.0+)
+
+Warden now **automatically detects when files have been refactored** and applies intelligent analysis to avoid false positives.
+
+### How It Works
+
+When a file's LOC has been **reduced by ≥30%** compared to its historical maximum, Warden recognizes this as refactoring:
+
+**Example:**
+```
+File: deal-migration.service.ts
+- Historical LOC peak: 321 lines
+- Current LOC: 142 lines
+- Reduction: 56% → ✅ Refactoring Detected!
+
+Instead of: 🔴 Critical (254% churn alert)
+Shows: ✅ Refactoring detected (LOC -56%)
+Risk Score: Attenuated by 0.6× to account for positive change
+```
+
+### Contextual Recommendations
+
+The system now provides context-aware recommendations:
+
+| Pattern | Recommendation |
+|---------|---|
+| ✅ Refactoring detected (LOC -X%) | Monitor stabilization after improvements |
+| 📈 Growing with high churn | Refactor needed - expansion causing instability |
+| 🔴 High churn, stable LOC | Code instability - consider refactoring |
+| ⚠️ Degrading trend | Churn increasing - quality declining |
+| 🔴 Large + fragmented | Refactor - multiple authors, high churn |
 
 ---
 
