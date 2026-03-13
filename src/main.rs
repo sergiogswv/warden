@@ -1,6 +1,6 @@
 use clap::{CommandFactory, Parser, Subcommand};
 use std::path::PathBuf;
-use warden::{git_parser, metrics, analytics, prediction, ui, cache, models};
+use warden::{git_parser, ui, cache, models, agent_config, agent_server, agent_reporter};
 
 #[derive(Parser)]
 #[command(name = "Warden")]
@@ -48,10 +48,14 @@ enum Commands {
     ClearCache,
     /// Show help
     Help,
+    /// Iniciar Warden como agente HTTP para recibir comandos del Cerebro
+    Serve,
 }
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
+    let config = agent_config::AgentConfig::from_env();
     let repo_path = args.path.unwrap_or_else(|| PathBuf::from("."));
 
     match args.command {
@@ -66,6 +70,19 @@ fn main() -> anyhow::Result<()> {
         }
         Some(Commands::Help) => {
             println!("{}", Args::command().render_help());
+            return Ok(());
+        }
+        // ── Nuevo: modo agente HTTP ───────────────────────────────────────────
+        Some(Commands::Serve) => {
+            println!("╔════════════════════════════════════╗");
+            println!("║   Warden v0.1.0 — Modo Agente     ║");
+            println!("║   Conectado al Cerebro             ║");
+            println!("╚════════════════════════════════════╝");
+            println!();
+            println!("   Cerebro URL : {}", config.cerebro_url);
+            println!("   Puerto      : {}", config.port);
+            println!();
+            agent_server::start_server(config).await?;
             return Ok(());
         }
         None => {}
@@ -103,10 +120,8 @@ fn main() -> anyhow::Result<()> {
     println!("🔍 Parsing Git history...");
     let commits = git_parser::parse_git_history(&repo_path, &args.history)
         .unwrap_or_else(|_| vec![]);
-
     println!("   ✓ {} commits analyzed", commits.len());
 
-    // Create dummy analysis for MVP
     use chrono::Utc;
     use std::collections::HashMap;
 
@@ -124,6 +139,22 @@ fn main() -> anyhow::Result<()> {
 
     // Cache results
     let _ = cache::save_cache(&repo_path, &analysis);
+
+    // ── Reportar resultado al Cerebro ─────────────────────────────────────────
+    {
+        let mut payload = HashMap::new();
+        payload.insert("total_commits".to_string(), serde_json::json!(analysis.total_commits));
+        payload.insert("files_analyzed".to_string(), serde_json::json!(analysis.files_analyzed));
+        payload.insert("overall_trend".to_string(), serde_json::json!(format!("{:?}", analysis.overall_trend)));
+        payload.insert("repository".to_string(), serde_json::json!(analysis.repository_path));
+
+        let _ = agent_reporter::report_event(
+            &config,
+            "analysis_complete",
+            "info",
+            payload,
+        ).await;
+    }
 
     // Render based on format
     match args.format.as_str() {
