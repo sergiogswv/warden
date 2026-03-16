@@ -13,7 +13,7 @@ struct Args {
     path: Option<PathBuf>,
 
     /// Analysis period (3m, 6m, 1y, or custom date)
-    #[arg(short, long, default_value = "6m")]
+    #[arg(short = 'H', long, default_value = "6m")]
     history: String,
 
     /// Output format (interactive, json, markdown)
@@ -46,8 +46,6 @@ enum Commands {
     Version,
     /// Clear cache
     ClearCache,
-    /// Show help
-    Help,
     /// Iniciar Warden como agente HTTP para recibir comandos del Cerebro
     Serve,
 }
@@ -66,10 +64,6 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::ClearCache) => {
             cache::clear_cache(&repo_path)?;
             println!("✅ Cache cleared");
-            return Ok(());
-        }
-        Some(Commands::Help) => {
-            println!("{}", Args::command().render_help());
             return Ok(());
         }
         // ── Nuevo: modo agente HTTP ───────────────────────────────────────────
