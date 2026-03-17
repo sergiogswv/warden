@@ -6,7 +6,6 @@
 //! refactoring in the future.
 
 use crate::models::{AnalysisResult, FileMetrics, ChurnPrediction, PredictionWarning, Prediction, AlertSeverity};
-use std::collections::HashMap;
 
 /// Performs least-squares linear regression on a set of points.
 ///

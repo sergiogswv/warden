@@ -135,11 +135,7 @@ async fn main() -> anyhow::Result<()> {
             println!("╚════════════════════════════════════╝");
             println!();
 
-            let config = AgentConfig::from_env().unwrap_or_else(|_| AgentConfig {
-                port: 8080,
-                cerebro_url: "http://localhost:3000".to_string(),
-                report_enabled: true,
-            });
+            let config = AgentConfig::from_env();
 
             println!("   Cerebro URL : {}", config.cerebro_url);
             println!("   Puerto      : {}", config.port);
@@ -206,23 +202,26 @@ async fn main() -> anyhow::Result<()> {
                 // Show specific file
                 if let Some(score) = risk_scores.iter().find(|r| &r.file == target_file) {
                     println!("  File: {}", score.file);
-                    println!("  Risk Score: {:.2}", score.total_score);
-                    println!("  Severity: {:?}", score.severity);
-                    println!("  Components:");
-                    println!("    - Churn: {:.2}", score.churn_component);
-                    println!("    - LOC: {:.2}", score.loc_component);
-                    println!("    - Authors: {:.2}", score.authors_component);
+                    println!("  Risk Score: {:.2}", score.risk_value);
+                    println!("  Risk Level: {}", score.risk_level);
+                    println!("  Churn: {:.1}%", score.churn_percentage);
+                    println!("  LOC: {}", score.loc);
+                    println!("  Authors: {}", score.author_count);
+                    println!("  Trend: {}", score.trend);
+                    if let Some(ref pred) = score.prediction {
+                        println!("  14-day Prediction: {:.1}%", pred.predicted_churn_14days);
+                    }
                 } else {
                     println!("  File not found in analysis");
                 }
             } else {
                 // Show top 10 risky files
                 let mut sorted = risk_scores.clone();
-                sorted.sort_by(|a, b| b.total_score.partial_cmp(&a.total_score).unwrap());
+                sorted.sort_by(|a, b| b.risk_value.partial_cmp(&a.risk_value).unwrap());
 
                 for (i, score) in sorted.iter().take(10).enumerate() {
-                    println!("  {}. {} - Score: {:.2} ({:?})",
-                        i + 1, score.file, score.total_score, score.severity);
+                    println!("  {}. {} - Risk: {:.2} ({})",
+                        i + 1, score.file, score.risk_value, score.risk_level);
                 }
             }
 

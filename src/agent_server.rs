@@ -4,9 +4,6 @@ use tokio::sync::Mutex;
 use crate::agent_config::AgentConfig;
 use crate::agent_models::{CommandAck, OrchestratorCommand};
 use crate::agent_reporter::{report_event, build_analysis_payload};
-use crate::predictor::Predictor;
-use crate::risk_scorer::RiskScorer;
-use crate::churn_reporter::ChurnReporter;
 
 /// Estado compartido del servidor
 #[derive(Clone)]

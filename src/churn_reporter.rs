@@ -2,7 +2,7 @@
 //!
 //! Analyzes churn evolution over time and identifies patterns.
 
-use crate::models::{AnalysisResult, FileMetrics, ChurnMetric};
+use crate::models::AnalysisResult;
 use chrono::{Duration, Utc};
 use std::collections::HashMap;
 
@@ -215,7 +215,7 @@ impl ChurnReporter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{AnalysisResult, FileMetrics, ChurnMetric};
+    use crate::models::{AnalysisResult, FileMetrics};
     use chrono::{Duration, Utc};
     use std::collections::HashMap;
 
