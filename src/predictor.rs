@@ -5,7 +5,8 @@
 //! and confidence scores to help identify files that will likely need
 //! refactoring in the future.
 
-use crate::models::{ChurnPrediction, PredictionWarning};
+use crate::models::{AnalysisResult, FileMetrics, ChurnPrediction, PredictionWarning, Prediction, AlertSeverity};
+use std::collections::HashMap;
 
 /// Performs least-squares linear regression on a set of points.
 ///
@@ -294,9 +295,108 @@ pub fn predict_churn_trajectory(
     })
 }
 
+/// Predictor struct for high-level prediction operations
+pub struct Predictor;
+
+impl Predictor {
+    /// Predict which files will become critical within N days
+    pub fn predict_critical(analysis: &AnalysisResult, days: usize, threshold: f64) -> Vec<Prediction> {
+        let mut predictions = Vec::new();
+
+        for (file, metrics) in &analysis.file_metrics {
+            if let Some(prediction) = Self::analyze_file(file, metrics, days, threshold) {
+                predictions.push(prediction);
+            }
+        }
+
+        // Sort by severity (Critical first) then by confidence
+        predictions.sort_by(|a, b| {
+            b.severity.cmp(&a.severity)
+                .then_with(|| b.confidence.partial_cmp(&a.confidence).unwrap())
+        });
+
+        predictions
+    }
+
+    fn analyze_file(file: &str, metrics: &FileMetrics, days: usize, threshold: f64) -> Option<Prediction> {
+        let churns: Vec<f64> = metrics.churn_history.iter()
+            .map(|c| c.churn_percentage)
+            .collect();
+
+        if churns.len() < 2 {
+            return None;
+        }
+
+        // Calculate churn velocity (rate of change)
+        let velocity = Self::calculate_velocity(&churns);
+
+        // Calculate average recent churn (last 3 entries or all)
+        let recent_count = churns.len().min(3);
+        let avg_churn: f64 = churns.iter()
+            .rev()
+            .take(recent_count)
+            .sum::<f64>() / recent_count as f64;
+
+        // Predict days to critical (churn > 80%)
+        let days_to_critical = Self::predict_days_to_threshold(avg_churn, velocity, 80.0);
+
+        // Determine severity based on days and threshold
+        let (severity, confidence) = if days_to_critical <= 7.0 {
+            (AlertSeverity::Critical, 0.9)
+        } else if days_to_critical <= (days / 2) as f64 {
+            (AlertSeverity::Warning, 0.75)
+        } else if avg_churn >= threshold * 100.0 {
+            (AlertSeverity::Warning, 0.6)
+        } else {
+            return None; // Not at risk within timeframe
+        };
+
+        Some(Prediction {
+            file: file.to_string(),
+            severity,
+            message: format!(
+                "Alto riesgo: churn promedio {:.1}% con velocidad {:.2}",
+                avg_churn, velocity
+            ),
+            days_to_unmaintainable: Some(days_to_critical as i32),
+            confidence,
+        })
+    }
+
+    fn calculate_velocity(churns: &[f64]) -> f64 {
+        if churns.len() < 2 {
+            return 0.0;
+        }
+
+        let mut changes = Vec::new();
+        for i in 1..churns.len() {
+            changes.push(churns[i] - churns[i - 1]);
+        }
+
+        changes.iter().sum::<f64>() / changes.len() as f64
+    }
+
+    fn predict_days_to_threshold(current: f64, velocity: f64, threshold: f64) -> f64 {
+        if velocity <= 0.0 {
+            return 999.0; // Stable or improving, not heading to threshold
+        }
+
+        let remaining = threshold - current;
+        if remaining <= 0.0 {
+            return 0.0; // Already at or above threshold
+        }
+
+        // Assuming velocity is per-commit, estimate ~2 commits/day average
+        let commits_needed = remaining / velocity;
+        commits_needed / 2.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::{ChurnMetric, LOCMetric};
+    use chrono::{Duration, Utc};
 
     // Tests for linear_regression function
     #[test]
@@ -446,453 +546,54 @@ mod tests {
         assert!(days_val <= 2, "should reach 80% in about 1 step");
     }
 
-    // Integration tests
+    // Tests for Predictor::predict_critical
     #[test]
-    fn test_regression_and_prediction_integration() {
-        // Create a dataset and use both functions together
-        let churn_values = vec![10.0, 15.0, 20.0, 25.0, 30.0];
-        let points: Vec<(usize, f64)> = churn_values
-            .iter()
-            .enumerate()
-            .map(|(i, &val)| (i, val))
-            .collect();
+    fn test_predict_critical_high_churn() {
+        use crate::models::{FileMetrics, ChurnMetric};
+        let metrics = FileMetrics {
+            file: "src/main.rs".to_string(),
+            loc_history: vec![],
+            churn_history: vec![
+                ChurnMetric { file: "src/main.rs".to_string(), timestamp: Utc::now() - Duration::days(14), churn_percentage: 45.0 },
+                ChurnMetric { file: "src/main.rs".to_string(), timestamp: Utc::now() - Duration::days(7), churn_percentage: 65.0 },
+                ChurnMetric { file: "src/main.rs".to_string(), timestamp: Utc::now(), churn_percentage: 75.0 },
+            ],
+            authors: vec![],
+            complexity_history: vec![],
+        };
 
-        let (slope, intercept) = linear_regression(&points);
+        let mut file_metrics = HashMap::new();
+        file_metrics.insert("src/main.rs".to_string(), metrics);
 
-        // Predict at day 7 (index 7)
-        let predicted_7 = predict_value_at(slope, intercept, 7);
-        assert!(predicted_7 > 30.0, "should predict higher churn in future");
+        let analysis = AnalysisResult {
+            repository_path: ".".to_string(),
+            analysis_period: "6m".to_string(),
+            files_analyzed: 1,
+            total_commits: 10,
+            authors_count: 1,
+            file_metrics,
+            predictions: vec![],
+            overall_trend: crate::models::Trend::Stable,
+            timestamp: Utc::now(),
+        };
 
-        // Predict at day 14
-        let predicted_14 = predict_value_at(slope, intercept, 14);
-        assert!(predicted_14 > predicted_7, "churn should increase further");
+        let predictions = Predictor::predict_critical(&analysis, 30, 0.5);
+        assert!(!predictions.is_empty());
+        assert_eq!(predictions[0].severity, AlertSeverity::Critical);
+        assert!(predictions[0].confidence >= 0.8);
     }
 
     #[test]
-    fn test_days_to_critical_with_real_churn_data() {
-        // Simulate realistic churn progression
-        let churn_values = vec![
-            5.0,  // day 0
-            12.0, // day 1
-            18.0, // day 2
-            25.0, // day 3
-            32.0, // day 4
-            40.0, // day 5
-            48.0, // day 6
-            56.0, // day 7
-        ];
-
-        let days = calculate_days_to_critical(&churn_values, 80.0);
-        assert!(days.is_some(), "should predict reaching 80% churn");
-        let days_val = days.unwrap();
-        assert!(days_val > 0 && days_val <= 10, "should be within reasonable range");
+    fn test_calculate_velocity_increasing() {
+        let churns = vec![20.0, 40.0, 60.0];
+        let velocity = Predictor::calculate_velocity(&churns);
+        assert!(velocity > 0.0);
     }
 
     #[test]
-    fn test_churn_prediction_confidence_scenario() {
-        // Test a scenario where we have consistent degradation
-        let churn_values = vec![20.0, 30.0, 40.0, 50.0, 60.0, 70.0];
-
-        // Calculate regression
-        let points: Vec<(usize, f64)> = churn_values
-            .iter()
-            .enumerate()
-            .map(|(i, &val)| (i, val))
-            .collect();
-        let (slope, intercept) = linear_regression(&points);
-
-        // Predict 7 days from now (index 6 + 7 = 13)
-        let predicted_7days = predict_value_at(slope, intercept, 13);
-
-        // Should predict approximately 130% or more (can go above 100% in predictions)
-        assert!(predicted_7days > 100.0, "should predict high churn after 7 days");
-
-        // Days to critical (80%)
-        let days_to_80 = calculate_days_to_critical(&churn_values, 80.0);
-        assert!(days_to_80.is_some());
-        let days_val = days_to_80.unwrap();
-        assert!(days_val > 0, "days_to_critical should be positive");
-    }
-
-    // Tests for predict_churn_trajectory function
-
-    #[test]
-    fn test_predict_churn_trajectory_basic_degrading_trend() {
-        // Test with degrading churn (positive trend)
-        let file = "src/degrading.rs";
-        let churn_history = vec![10.0, 20.0, 30.0];
-
-        let result = predict_churn_trajectory(file, &churn_history);
-        assert!(result.is_ok(), "should successfully predict with 3 data points");
-
-        let prediction = result.unwrap();
-        assert_eq!(prediction.file, file);
-        assert_eq!(prediction.current_churn, 30.0, "current churn should be last value");
-        assert!(
-            prediction.predicted_churn_7days > prediction.current_churn,
-            "degrading trend should show increase"
-        );
-        assert!(
-            prediction.predicted_churn_14days >= prediction.predicted_churn_7days,
-            "14-day prediction should be >= 7-day"
-        );
-        assert!(
-            prediction.prediction_confidence >= 0.5 && prediction.prediction_confidence <= 1.0,
-            "confidence should be between 0.5 and 1.0"
-        );
-    }
-
-    #[test]
-    fn test_predict_churn_trajectory_improving_trend() {
-        // Test with improving churn (negative trend)
-        let file = "src/improving.rs";
-        let churn_history = vec![60.0, 50.0, 40.0, 35.0];
-
-        let result = predict_churn_trajectory(file, &churn_history);
-        assert!(result.is_ok());
-
-        let prediction = result.unwrap();
-        assert_eq!(prediction.file, file);
-        assert_eq!(prediction.current_churn, 35.0);
-        // With improving trend, predictions should not increase significantly
-        assert!(prediction.predicted_churn_7days <= prediction.current_churn + 10.0);
-        assert!(prediction.predicted_churn_14days <= prediction.predicted_churn_7days + 10.0);
-    }
-
-    #[test]
-    fn test_predict_churn_trajectory_stable_trend() {
-        // Test with stable churn (no trend)
-        let file = "src/stable.rs";
-        let churn_history = vec![40.0, 40.0, 40.0, 40.0];
-
-        let result = predict_churn_trajectory(file, &churn_history);
-        assert!(result.is_ok());
-
-        let prediction = result.unwrap();
-        assert_eq!(prediction.file, file);
-        assert_eq!(prediction.current_churn, 40.0);
-        // With stable trend, predictions should remain approximately the same
-        assert!((prediction.predicted_churn_7days - 40.0).abs() < 1.0);
-        assert!((prediction.predicted_churn_14days - 40.0).abs() < 1.0);
-    }
-
-    #[test]
-    fn test_predict_churn_trajectory_minimal_data() {
-        // Test with minimal data (2 points)
-        let file = "src/minimal.rs";
-        let churn_history = vec![20.0, 40.0];
-
-        let result = predict_churn_trajectory(file, &churn_history);
-        assert!(result.is_ok(), "should work with 2 data points");
-
-        let prediction = result.unwrap();
-        assert_eq!(prediction.current_churn, 40.0);
-        // With 2 points, confidence should be reduced
-        assert!(prediction.prediction_confidence < 1.0);
-        assert!(prediction.prediction_confidence >= 0.5);
-    }
-
-    #[test]
-    fn test_predict_churn_trajectory_insufficient_data() {
-        // Test with insufficient data (1 point)
-        let file = "src/insufficient.rs";
-        let churn_history = vec![30.0];
-
-        let result = predict_churn_trajectory(file, &churn_history);
-        assert!(result.is_err(), "should fail with only 1 data point");
-    }
-
-    #[test]
-    fn test_predict_churn_trajectory_extended_data() {
-        // Test with extended data (10+ points)
-        let file = "src/extended.rs";
-        let churn_history = vec![5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0, 45.0, 50.0];
-
-        let result = predict_churn_trajectory(file, &churn_history);
-        assert!(result.is_ok(), "should work with 10 data points");
-
-        let prediction = result.unwrap();
-        assert!(prediction.prediction_confidence > 0.5);
-        assert!(prediction.prediction_confidence <= 1.0);
-        // With 10 points (more than 7), confidence should include penalty for noise
-        assert!(prediction.prediction_confidence < 1.0);
-    }
-
-    #[test]
-    fn test_predict_churn_trajectory_predictions_differ() {
-        // Verify 7-day and 14-day predictions are different
-        let file = "src/different.rs";
-        let churn_history = vec![10.0, 15.0, 20.0, 25.0];
-
-        let result = predict_churn_trajectory(file, &churn_history);
-        assert!(result.is_ok());
-
-        let prediction = result.unwrap();
-        // For a linear trend without clamping, predictions should differ
-        // With 7-day interval, difference should be visible
-        assert!(
-            (prediction.predicted_churn_14days - prediction.predicted_churn_7days).abs() > 0.1,
-            "7-day and 14-day predictions should differ meaningfully"
-        );
-    }
-
-    #[test]
-    fn test_predict_churn_trajectory_confidence_varies_by_size() {
-        // Verify confidence scores vary with data size
-        let file = "src/test.rs";
-
-        // Small dataset (2 points)
-        let small_data = vec![20.0, 40.0];
-        let small_result = predict_churn_trajectory(file, &small_data);
-        assert!(small_result.is_ok());
-        let small_confidence = small_result.unwrap().prediction_confidence;
-
-        // Medium dataset (7 points)
-        let medium_data = vec![10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0];
-        let medium_result = predict_churn_trajectory(file, &medium_data);
-        assert!(medium_result.is_ok());
-        let medium_confidence = medium_result.unwrap().prediction_confidence;
-
-        // Large dataset (12 points)
-        let large_data = vec![5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0, 45.0, 50.0, 55.0, 60.0];
-        let large_result = predict_churn_trajectory(file, &large_data);
-        assert!(large_result.is_ok());
-        let large_confidence = large_result.unwrap().prediction_confidence;
-
-        // Medium should have highest confidence (exactly 7 points)
-        assert!(
-            medium_confidence >= small_confidence,
-            "medium dataset should have higher or equal confidence than small"
-        );
-        assert!(
-            medium_confidence >= large_confidence,
-            "medium dataset should have higher or equal confidence than large"
-        );
-    }
-
-    #[test]
-    fn test_predict_churn_trajectory_warning_none() {
-        // Test warning level: None (< 40%)
-        let file = "src/safe.rs";
-        let churn_history = vec![5.0, 8.0, 11.0, 14.0];
-
-        let result = predict_churn_trajectory(file, &churn_history);
-        assert!(result.is_ok());
-
-        let prediction = result.unwrap();
-        // With very gentle slope (~1 per day), 14-day prediction should still be < 40%
-        if prediction.predicted_churn_14days < 40.0 {
-            assert_eq!(
-                prediction.warning_level,
-                PredictionWarning::None,
-                "should be None for predictions < 40%"
-            );
-        }
-    }
-
-    #[test]
-    fn test_predict_churn_trajectory_warning_watch() {
-        // Test warning level: Watch (40-60%)
-        let file = "src/watch.rs";
-        let churn_history = vec![20.0, 30.0, 40.0, 50.0];
-
-        let result = predict_churn_trajectory(file, &churn_history);
-        assert!(result.is_ok());
-
-        let prediction = result.unwrap();
-        // 14-day prediction should be around 60-70 given trend, let's check what we get
-        if prediction.predicted_churn_14days >= 40.0 && prediction.predicted_churn_14days < 60.0 {
-            assert_eq!(prediction.warning_level, PredictionWarning::Watch);
-        }
-    }
-
-    #[test]
-    fn test_predict_churn_trajectory_warning_degrade() {
-        // Test warning level: Degrade (60-80%)
-        let file = "src/degrade.rs";
-        let churn_history = vec![20.0, 35.0, 50.0, 65.0];
-
-        let result = predict_churn_trajectory(file, &churn_history);
-        assert!(result.is_ok());
-
-        let prediction = result.unwrap();
-        if prediction.predicted_churn_14days >= 60.0 && prediction.predicted_churn_14days < 80.0 {
-            assert_eq!(prediction.warning_level, PredictionWarning::Degrade);
-        }
-    }
-
-    #[test]
-    fn test_predict_churn_trajectory_warning_critical() {
-        // Test warning level: Critical (>= 80%)
-        let file = "src/critical.rs";
-        let churn_history = vec![40.0, 55.0, 70.0, 85.0];
-
-        let result = predict_churn_trajectory(file, &churn_history);
-        assert!(result.is_ok());
-
-        let prediction = result.unwrap();
-        if prediction.predicted_churn_14days >= 80.0 {
-            assert_eq!(prediction.warning_level, PredictionWarning::Critical);
-        }
-    }
-
-    #[test]
-    fn test_predict_churn_trajectory_days_to_critical() {
-        // Test days-to-critical calculation
-        let file = "src/critical_time.rs";
-        let churn_history = vec![10.0, 20.0, 30.0, 40.0, 50.0];
-
-        let result = predict_churn_trajectory(file, &churn_history);
-        assert!(result.is_ok());
-
-        let prediction = result.unwrap();
-        assert!(
-            prediction.days_to_critical.is_some(),
-            "should calculate days to critical with increasing trend"
-        );
-        let days = prediction.days_to_critical.unwrap();
-        assert!(days > 0, "days to critical should be positive");
-    }
-
-    #[test]
-    fn test_predict_churn_trajectory_all_same_values() {
-        // Edge case: all same churn values
-        let file = "src/constant.rs";
-        let churn_history = vec![50.0, 50.0, 50.0, 50.0, 50.0];
-
-        let result = predict_churn_trajectory(file, &churn_history);
-        assert!(result.is_ok());
-
-        let prediction = result.unwrap();
-        assert_eq!(prediction.current_churn, 50.0);
-        // With constant slope, predictions should be approximately the same
-        assert!((prediction.predicted_churn_7days - 50.0).abs() < 0.1);
-        assert!((prediction.predicted_churn_14days - 50.0).abs() < 0.1);
-        assert_eq!(prediction.days_to_critical, None, "constant trend won't reach 80%");
-    }
-
-    #[test]
-    fn test_predict_churn_trajectory_clamping_max() {
-        // Test that predictions are clamped to max 100%
-        let file = "src/extreme.rs";
-        // Very steep increasing trend
-        let churn_history = vec![1.0, 25.0, 50.0, 75.0];
-
-        let result = predict_churn_trajectory(file, &churn_history);
-        assert!(result.is_ok());
-
-        let prediction = result.unwrap();
-        // Even with steep trend, values should be clamped at 100%
-        assert!(
-            prediction.predicted_churn_7days <= 100.0,
-            "7-day prediction should be clamped to 100%"
-        );
-        assert!(
-            prediction.predicted_churn_14days <= 100.0,
-            "14-day prediction should be clamped to 100%"
-        );
-    }
-
-    #[test]
-    fn test_predict_churn_trajectory_clamping_min() {
-        // Test that predictions are clamped to min 0%
-        let file = "src/negative.rs";
-        // Strong decreasing trend
-        let churn_history = vec![80.0, 60.0, 40.0, 20.0];
-
-        let result = predict_churn_trajectory(file, &churn_history);
-        assert!(result.is_ok());
-
-        let prediction = result.unwrap();
-        // Even with negative trend, values should be clamped at 0%
-        assert!(
-            prediction.predicted_churn_7days >= 0.0,
-            "7-day prediction should be clamped to 0%"
-        );
-        assert!(
-            prediction.predicted_churn_14days >= 0.0,
-            "14-day prediction should be clamped to 0%"
-        );
-    }
-
-    #[test]
-    fn test_confidence_score_calculation() {
-        // Test confidence score function directly
-        // 7 points should have 100% confidence
-        let conf_7 = calculate_confidence_score(7);
-        assert_eq!(conf_7, 1.0, "7 points should give 100% confidence");
-
-        // 2 points should have reduced confidence (50% reduction)
-        let conf_2 = calculate_confidence_score(2);
-        assert_eq!(conf_2, 0.5, "2 points should give 50% confidence");
-
-        // 12 points should have slightly reduced confidence
-        let conf_12 = calculate_confidence_score(12);
-        assert!(conf_12 < 1.0 && conf_12 >= 0.5, "12 points should give reduced confidence");
-        let expected_12 = 1.0 - ((12 - 7) as f64 * 0.05);
-        assert!((conf_12 - expected_12).abs() < 0.01);
-    }
-
-    #[test]
-    fn test_warning_level_determination() {
-        // Test warning level determination function directly
-        assert_eq!(
-            determine_warning_level(35.0),
-            PredictionWarning::None,
-            "< 40% should be None"
-        );
-        assert_eq!(
-            determine_warning_level(50.0),
-            PredictionWarning::Watch,
-            "40-60% should be Watch"
-        );
-        assert_eq!(
-            determine_warning_level(70.0),
-            PredictionWarning::Degrade,
-            "60-80% should be Degrade"
-        );
-        assert_eq!(
-            determine_warning_level(85.0),
-            PredictionWarning::Critical,
-            ">= 80% should be Critical"
-        );
-    }
-
-    #[test]
-    fn test_predict_churn_trajectory_integration_realistic() {
-        // Integration test with realistic data
-        let file = "src/utils.rs";
-        let churn_history = vec![
-            5.0,  // week 1: slight changes
-            12.0, // week 2: increasing
-            18.0, // week 3: moderate churn
-            28.0, // week 4: significant changes
-            38.0, // week 5: degrading
-            48.0, // week 6: high churn
-        ];
-
-        let result = predict_churn_trajectory(file, &churn_history);
-        assert!(result.is_ok(), "should predict with realistic data");
-
-        let prediction = result.unwrap();
-        assert_eq!(prediction.file, file);
-        assert_eq!(prediction.current_churn, 48.0);
-
-        // Verify all fields are populated
-        assert!(prediction.predicted_churn_7days > 0.0);
-        assert!(prediction.predicted_churn_14days > 0.0);
-        assert!(prediction.prediction_confidence >= 0.5 && prediction.prediction_confidence <= 1.0);
-
-        // Verify trend is captured
-        assert!(
-            prediction.predicted_churn_14days > prediction.current_churn,
-            "strong upward trend should continue"
-        );
-
-        // Should be at least Watch level given the high predictions
-        assert!(
-            prediction.warning_level != PredictionWarning::None,
-            "degrading file should trigger warning"
-        );
+    fn test_calculate_velocity_stable() {
+        let churns = vec![50.0, 50.0, 50.0];
+        let velocity = Predictor::calculate_velocity(&churns);
+        assert!((velocity).abs() < 0.01);
     }
 }

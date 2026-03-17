@@ -50,6 +50,27 @@ enum Commands {
     Help,
     /// Check for updates
     CheckUpdates,
+    /// Iniciar Warden como agente HTTP para recibir comandos del Cerebro
+    Serve,
+    /// Predict which files will become critical
+    PredictCritical {
+        #[arg(long, default_value = "30")]
+        days: usize,
+        #[arg(long, default_value = "0.5")]
+        threshold: f64,
+    },
+    /// Assess risk scores for files
+    RiskAssess {
+        #[arg(long)]
+        file: Option<String>,
+    },
+    /// Generate churn trend report
+    ChurnReport {
+        #[arg(long, default_value = "12")]
+        weeks: usize,
+        #[arg(long, default_value = "15")]
+        top: usize,
+    },
 }
 
 #[tokio::main]
@@ -86,17 +107,10 @@ async fn main() -> anyhow::Result<()> {
             println!("✅ Cache cleared");
             return Ok(());
         }
-        // ── Nuevo: modo agente HTTP ───────────────────────────────────────────
-        Some(Commands::Serve) => {
-            println!("╔════════════════════════════════════╗");
-            println!("║   Warden v0.1.0 — Modo Agente     ║");
-            println!("║   Conectado al Cerebro             ║");
-            println!("╚════════════════════════════════════╝");
+        Some(Commands::Help) => {
+            let mut cmd = Args::command();
+            cmd.print_help()?;
             println!();
-            println!("   Cerebro URL : {}", config.cerebro_url);
-            println!("   Puerto      : {}", config.port);
-            println!();
-            agent_server::start_server(config).await?;
             return Ok(());
         }
         Some(Commands::CheckUpdates) => {
@@ -110,6 +124,162 @@ async fn main() -> anyhow::Result<()> {
             println!("Latest available: (configure GITHUB_REPO for automatic checks)");
             println!();
             println!("✓ To enable automatic checks, set GITHUB_REPO environment variable");
+            return Ok(());
+        }
+        // ── Nuevo: modo agente HTTP ───────────────────────────────────────────
+        Some(Commands::Serve) => {
+            use warden::agent_config::AgentConfig;
+            println!("╔════════════════════════════════════╗");
+            println!("║   Warden v0.1.0 — Modo Agente     ║");
+            println!("║   Conectado al Cerebro             ║");
+            println!("╚════════════════════════════════════╝");
+            println!();
+
+            let config = AgentConfig::from_env().unwrap_or_else(|_| AgentConfig {
+                port: 8080,
+                cerebro_url: "http://localhost:3000".to_string(),
+                report_enabled: true,
+            });
+
+            println!("   Cerebro URL : {}", config.cerebro_url);
+            println!("   Puerto      : {}", config.port);
+            println!();
+            warden::agent_server::start_server(config).await?;
+            return Ok(());
+        }
+        Some(Commands::PredictCritical { days, threshold }) => {
+            println!("🔮 Predicting critical files ({} days, threshold {})...", days, threshold);
+
+            // Parse git history and analyze
+            println!("🔍 Parsing Git history...");
+            let commits = git_parser::parse_git_history(&repo_path, "6m").unwrap_or_else(|_| vec![]);
+            println!("   ✓ {} commits analyzed", commits.len());
+
+            println!("📈 Calculating file metrics...");
+            let file_metrics = metrics::process_commits(&commits)?;
+            println!("   ✓ {} files analyzed", file_metrics.len());
+
+            use chrono::Utc;
+            let analysis = models::AnalysisResult {
+                repository_path: repo_path.to_string_lossy().to_string(),
+                analysis_period: "6m".to_string(),
+                files_analyzed: file_metrics.len(),
+                total_commits: commits.len(),
+                authors_count: commits.iter().map(|c| c.author.clone()).collect::<std::collections::HashSet<_>>().len(),
+                file_metrics,
+                predictions: vec![],
+                overall_trend: models::Trend::Stable,
+                timestamp: Utc::now(),
+            };
+
+            let predictions = warden::predictor::Predictor::predict_critical(&analysis, days, threshold);
+
+            println!("\n📊 PREDICTIONS:\n");
+            for (i, pred) in predictions.iter().take(10).enumerate() {
+                println!("  {}. {} - {:?} (confidence: {:.0}%)",
+                    i + 1, pred.file, pred.severity, pred.confidence * 100.0);
+            }
+
+            if predictions.is_empty() {
+                println!("  No files at risk within {} days", days);
+            }
+
+            return Ok(());
+        }
+        Some(Commands::RiskAssess { file }) => {
+            println!("📊 Assessing risk for: {:?}", file);
+
+            // Parse git history and analyze
+            println!("🔍 Parsing Git history...");
+            let commits = git_parser::parse_git_history(&repo_path, "6m").unwrap_or_else(|_| vec![]);
+            println!("   ✓ {} commits analyzed", commits.len());
+
+            println!("📈 Calculating file metrics...");
+            let file_metrics = metrics::process_commits(&commits)?;
+            println!("   ✓ {} files analyzed", file_metrics.len());
+
+            let risk_scores = risk_scorer::calculate_risk_scores(&file_metrics, commits.len())?;
+
+            println!("\n📊 RISK ASSESSMENT:\n");
+
+            if let Some(ref target_file) = file {
+                // Show specific file
+                if let Some(score) = risk_scores.iter().find(|r| &r.file == target_file) {
+                    println!("  File: {}", score.file);
+                    println!("  Risk Score: {:.2}", score.total_score);
+                    println!("  Severity: {:?}", score.severity);
+                    println!("  Components:");
+                    println!("    - Churn: {:.2}", score.churn_component);
+                    println!("    - LOC: {:.2}", score.loc_component);
+                    println!("    - Authors: {:.2}", score.authors_component);
+                } else {
+                    println!("  File not found in analysis");
+                }
+            } else {
+                // Show top 10 risky files
+                let mut sorted = risk_scores.clone();
+                sorted.sort_by(|a, b| b.total_score.partial_cmp(&a.total_score).unwrap());
+
+                for (i, score) in sorted.iter().take(10).enumerate() {
+                    println!("  {}. {} - Score: {:.2} ({:?})",
+                        i + 1, score.file, score.total_score, score.severity);
+                }
+            }
+
+            return Ok(());
+        }
+        Some(Commands::ChurnReport { weeks, top }) => {
+            println!("📈 Generating churn report ({} weeks, top {})...", weeks, top);
+
+            // Parse git history and analyze
+            println!("🔍 Parsing Git history...");
+            let commits = git_parser::parse_git_history(&repo_path, "6m").unwrap_or_else(|_| vec![]);
+            println!("   ✓ {} commits analyzed", commits.len());
+
+            println!("📈 Calculating file metrics...");
+            let file_metrics = metrics::process_commits(&commits)?;
+            println!("   ✓ {} files analyzed", file_metrics.len());
+
+            use chrono::Utc;
+            let analysis = models::AnalysisResult {
+                repository_path: repo_path.to_string_lossy().to_string(),
+                analysis_period: "6m".to_string(),
+                files_analyzed: file_metrics.len(),
+                total_commits: commits.len(),
+                authors_count: commits.iter().map(|c| c.author.clone()).collect::<std::collections::HashSet<_>>().len(),
+                file_metrics,
+                predictions: vec![],
+                overall_trend: models::Trend::Stable,
+                timestamp: Utc::now(),
+            };
+
+            let report = warden::churn_reporter::ChurnReporter::generate_report(&analysis, weeks);
+
+            println!("\n📊 CHURN REPORT\n");
+            println!("  Summary:");
+            println!("    - Total commits: {}", report.summary.total_commits);
+            println!("    - Avg churn: {:.2}%", report.summary.avg_churn);
+            println!("    - Max churn: {:.2}%", report.summary.max_churn);
+            println!("    - Trend: {}", report.summary.trend_direction);
+
+            println!("\n  Weekly Trends:");
+            for week in &report.weekly_trends {
+                println!("    - Week of {}: {:.2}% ({} commits)",
+                    week.week_start, week.avg_churn, week.commit_count);
+            }
+
+            println!("\n  Top {} Churned Files:", top);
+            for (i, file) in report.top_churned_files.iter().take(top).enumerate() {
+                println!("    {}. {} - Total churn: {:.2}% ({} changes)",
+                    i + 1, file.file, file.total_churn, file.change_count);
+            }
+
+            if !report.patterns.is_empty() {
+                println!("\n  Patterns Detected:");
+                for pattern in &report.patterns {
+                    println!("    - [{}] {}", pattern.severity.to_uppercase(), pattern.description);
+                }
+            }
 
             return Ok(());
         }
