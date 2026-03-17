@@ -1,6 +1,6 @@
-# Warden 🛡️
+# 👮 WARDEN
 
-**Historical code quality analysis and predictive architecture insights for modern development teams.**
+> **Real-Time Security & Vulnerability Guardian**
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-0.5.0-blue.svg" alt="Version">
@@ -10,7 +10,7 @@
 
 ---
 
-## 🚀 What is Warden?
+## 🚀 Key Responsibilities
 
 **Warden** is an independent CLI tool that analyzes Git history to track technical debt over time and predict architecture problems before they happen.
 
@@ -155,20 +155,10 @@ The system now provides context-aware recommendations:
 ## 🔧 Quick Start
 
 ```bash
-# Build the project
-cargo build --release
-
-# Run Warden (interactive menu)
-./target/release/warden
-
-# Analyze last 3 months
-./target/release/warden --history 3m
-
-# Compare branches
-./target/release/warden --compare main origin/develop
-
-# Export JSON
-./target/release/warden --json > metrics.json
+# Install via Go
+git clone https://github.com/sergiogswv/warden.git
+cd warden
+go build -o warden main.go
 ```
 
 ---

@@ -13,7 +13,7 @@ struct Args {
     path: Option<PathBuf>,
 
     /// Analysis period (3m, 6m, 1y, or custom date)
-    #[arg(short, long, default_value = "6m")]
+    #[arg(short = 'H', long, default_value = "6m")]
     history: String,
 
     /// Output format (interactive, json, markdown)
@@ -52,7 +52,8 @@ enum Commands {
     CheckUpdates,
 }
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let mut repo_path = args.path.unwrap_or_else(|| PathBuf::from("."));
 
@@ -85,8 +86,17 @@ fn main() -> anyhow::Result<()> {
             println!("✅ Cache cleared");
             return Ok(());
         }
-        Some(Commands::Help) => {
-            println!("{}", Args::command().render_help());
+        // ── Nuevo: modo agente HTTP ───────────────────────────────────────────
+        Some(Commands::Serve) => {
+            println!("╔════════════════════════════════════╗");
+            println!("║   Warden v0.1.0 — Modo Agente     ║");
+            println!("║   Conectado al Cerebro             ║");
+            println!("╚════════════════════════════════════╝");
+            println!();
+            println!("   Cerebro URL : {}", config.cerebro_url);
+            println!("   Puerto      : {}", config.port);
+            println!();
+            agent_server::start_server(config).await?;
             return Ok(());
         }
         Some(Commands::CheckUpdates) => {
