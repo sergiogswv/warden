@@ -46,8 +46,6 @@ enum Commands {
     Version,
     /// Clear cache
     ClearCache,
-    /// Show help
-    Help,
     /// Check for updates
     CheckUpdates,
     /// Iniciar Warden como agente HTTP para recibir comandos del Cerebro
@@ -105,12 +103,6 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::ClearCache) => {
             cache::clear_cache(&repo_path)?;
             println!("✅ Cache cleared");
-            return Ok(());
-        }
-        Some(Commands::Help) => {
-            let mut cmd = Args::command();
-            cmd.print_help()?;
-            println!();
             return Ok(());
         }
         Some(Commands::CheckUpdates) => {
@@ -357,40 +349,38 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // Render based on format
-    match args.format.as_str() {
-        "json" => {
-            ui::export_json(&analysis, "warden-report.json")?;
-        }
-        _ => {
-            // Show main menu summary unless --only-* flags are used
-            if !args.only_trends && !args.only_hotspots && !args.only_predictions {
-                ui::show_main_menu(&analysis)?;
-                ui::render_hotspots_with_risk_and_predictions(&risk_scores, 10);
-            } else {
-                // Only show header when using --only-* flags
-                println!();
-                println!("╔════════════════════════════════════╗");
-                println!("║   Warden v0.5.0                    ║");
-                println!("║   Code Quality Historical Analysis ║");
-                println!("╚════════════════════════════════════╝");
-                println!();
+    // Note: --format json takes precedence over --only-* flags for programmatic usage
+    if args.format == "json" {
+        ui::export_json(&analysis, "warden-report.json")?;
+    } else {
+        // Show main menu summary unless --only-* flags are used
+        if !args.only_trends && !args.only_hotspots && !args.only_predictions {
+            ui::show_main_menu(&analysis)?;
+            ui::render_hotspots_with_risk_and_predictions(&risk_scores, 10);
+        } else {
+            // Only show header when using --only-* flags
+            println!();
+            println!("╔════════════════════════════════════╗");
+            println!("║   Warden v0.5.0                    ║");
+            println!("║   Code Quality Historical Analysis ║");
+            println!("╚════════════════════════════════════╝");
+            println!();
 
-                // Show requested sections
-                if args.only_trends {
-                    println!("📈 TREND ANALYSIS:");
-                    println!("   • Overall Trend: {}", analysis.overall_trend);
-                    ui::render_debt_trends(&analysis)?;
-                }
+            // Show requested sections
+            if args.only_trends {
+                println!("📈 TREND ANALYSIS:");
+                println!("   • Overall Trend: {}", analysis.overall_trend);
+                ui::render_debt_trends(&analysis)?;
+            }
 
-                if args.only_hotspots {
-                    println!("🔴 HOTSPOT ANALYSIS:");
-                    ui::render_hotspots_with_risk_and_predictions(&risk_scores, 20);
-                }
+            if args.only_hotspots {
+                println!("🔴 HOTSPOT ANALYSIS:");
+                ui::render_hotspots_with_risk_and_predictions(&risk_scores, 20);
+            }
 
-                if args.only_predictions {
-                    println!("🔮 PREDICTIVE ALERTS:");
-                    ui::render_alerts(&analysis)?;
-                }
+            if args.only_predictions {
+                println!("🔮 PREDICTIVE ALERTS:");
+                ui::render_alerts(&analysis)?;
             }
         }
     }

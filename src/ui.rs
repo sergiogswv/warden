@@ -255,8 +255,15 @@ pub fn render_author_stats(_analysis: &AnalysisResult) -> anyhow::Result<()> {
 
 pub fn export_json(analysis: &AnalysisResult, output_path: &str) -> anyhow::Result<()> {
     let json = serde_json::to_string_pretty(analysis)?;
-    std::fs::write(output_path, json)?;
+    std::fs::write(output_path, &json)?;
     println!("✅ Exported to {}", output_path);
+
+    // Also print JSON to stdout for programmatic usage (Ejecutor integration)
+    // This allows the result to be captured by the process manager
+    println!("\n📄 JSON_RESULT_START");
+    println!("{}", json);
+    println!("JSON_RESULT_END");
+
     Ok(())
 }
 

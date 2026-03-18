@@ -24,3 +24,5 @@ Cargo.lock
 # OS
 Thumbs.db
 docs/plans/
+warden-report.json
+warden-report.md
