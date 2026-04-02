@@ -147,7 +147,31 @@ async def handle_command(
     # ── 6. Determinar severidad final para el evento ──────────────────
     severity = _infer_severity(action, raw_result, analysis)
 
-    # ── 7. Reportar a Cerebro ─────────────────────────────────────────
+    # ── 7. Extraer info para Auto-Fix ──────────────────────────────────
+    # Extraer finding/recomendación del LLM para el Auto-Fix
+    res_data = raw_result.get("result", {})
+    top_risks = res_data.get("top_risks", [])
+    secrets_found = res_data.get("secrets_found", [])
+
+    # Construir descripción del problema para Cerebro
+    finding_desc = f"Análisis {action}: {len(top_risks)} riesgos detectados"
+    if raw_result.get("status") == "error":
+        finding_desc = f"Error en análisis {action}: {raw_result.get('error', 'Unknown error')}"
+    elif secrets_found:
+        finding_desc = f"¡ALERTA! {len(secrets_found)} secretos expuestos detectados"
+
+    # Extraer primer archivo afectado si existe
+    affected_file = None
+    if top_risks and len(top_risks) > 0:
+        first_risk = top_risks[0]
+        if isinstance(first_risk, dict):
+            affected_file = first_risk.get("file") or first_risk.get("path")
+    elif secrets_found and len(secrets_found) > 0:
+        first_secret = secrets_found[0]
+        if isinstance(first_secret, dict):
+            affected_file = first_secret.get("file")
+
+    # ── 8. Reportar a Cerebro ─────────────────────────────────────────
     await report_to_cerebro(
         event_type=f"warden_{action.replace('-', '_')}_completed",
         severity=severity,
@@ -157,6 +181,12 @@ async def handle_command(
             "summary": analysis,
             "memory_id": memory_id,
             "raw_status": raw_result.get("status"),
+            # Campos para Auto-Fix (compatibles con Architect/Cerebro)
+            "finding": finding_desc,
+            "recommendation": analysis[:2000] if analysis else "Revisar hallazgos de seguridad detectados",
+            "file": affected_file or target,
+            "risks_count": len(top_risks),
+            "secrets_count": len(secrets_found),
         },
     )
 
