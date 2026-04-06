@@ -144,6 +144,14 @@ async def handle_command(
         analysis = f"[Análisis LLM no disponible: {exc}]"
         print(f"⚠️  LLM falló, se retorna raw result: {exc}")
 
+    # GARANTÍA: summary nunca vacío (requerido por Cerebro Proactivo)
+    if not analysis or not analysis.strip():
+        res_tmp = raw_result.get("result", {})
+        risks_tmp = len(res_tmp.get("top_risks", []))
+        secrets_tmp = len(res_tmp.get("secrets_found", []))
+        analysis = f"Análisis de seguridad completado para {target}. {risks_tmp} riesgos, {secrets_tmp} secretos detectados."
+        print(f"⚠️  [Warden] summary vacío — usando fallback de contenido")
+
     # ── 6. Determinar severidad final para el evento ──────────────────
     severity = _infer_severity(action, raw_result, analysis)
 
@@ -178,15 +186,16 @@ async def handle_command(
         payload={
             "action": action,
             "target": target,
-            "summary": analysis,
+            "summary": analysis,          # Siempre tiene contenido (garantía aplicada arriba)
             "memory_id": memory_id,
             "raw_status": raw_result.get("status"),
-            # Campos para Auto-Fix (compatibles con Architect/Cerebro)
+            # Campos estandarizados para Cerebro Proactivo
             "finding": finding_desc,
             "recommendation": analysis[:2000] if analysis else "Revisar hallazgos de seguridad detectados",
             "file": affected_file or target,
-            "risks_count": len(top_risks),
-            "secrets_count": len(secrets_found),
+            "issues_count": len(top_risks) + len(secrets_found),  # ✅ Estandarizado
+            "risks_count": len(top_risks),                          # Backward compat
+            "secrets_count": len(secrets_found),                    # Backward compat
         },
     )
 
