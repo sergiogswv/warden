@@ -26,3 +26,7 @@ Thumbs.db
 docs/plans/
 warden-report.json
 warden-report.md
+# Python cache
+__pycache__/
+*.py[cod]
+*.class
