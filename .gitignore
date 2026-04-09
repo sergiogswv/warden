@@ -16,10 +16,10 @@ Cargo.lock
 *~
 .DS_Store
 
-# Environment
+# Environment variables
 .env
-.env.local
-*.log
+.env.*
+!.env.example
 
 # OS
 Thumbs.db
