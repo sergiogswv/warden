@@ -446,6 +446,14 @@ async fn handle_command(
     Json(ack)
 }
 
+async fn health_check() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "status": "ok",
+        "agent": "warden-core",
+        "version": "0.1.0"
+    }))
+}
+
 /// Levanta el servidor HTTP para recibir comandos del Cerebro
 pub async fn start_server(config: AgentConfig) -> anyhow::Result<()> {
     let port = config.port;
@@ -458,6 +466,7 @@ pub async fn start_server(config: AgentConfig) -> anyhow::Result<()> {
     };
 
     let app = Router::new()
+        .route("/health", axum::routing::get(health_check))
         .route("/command", post(handle_command))
         .with_state(state);
 
